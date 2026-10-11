@@ -7,9 +7,10 @@ import { MapGrid } from './components/MapGrid';
 import { Scrubber } from './components/Scrubber';
 import { TurnSummary } from './components/TurnSummary';
 
-// `?map=v2` swaps in the N0 spike renderer (lazy, so v1 never loads React Flow or ELK); `&comp=1` is the D1 comp shell.
+// The v2 renderer is the default; `?map=v1` keeps the original grid (lazy imports: v1 never loads React Flow or ELK).
+// `&comp=1` is the D1 comp shell.
 const params = new URLSearchParams(location.search);
-const V2 = params.get('map') === 'v2';
+const V2 = params.get('map') !== 'v1';
 const MapV2 = lazy(() => import('./v2/MapV2'));
 const CompShell = lazy(() => import('./v2/CompShell'));
 

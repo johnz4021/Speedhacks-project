@@ -6,7 +6,8 @@
     "dev": "vite",
     "build": "tsc -p . --noEmit && vite build",
     "preview": "vite preview --port 5173",
-    "fake": "tsx scripts/fake-events.ts"
+    "fake": "tsx scripts/fake-events.ts",
+    "test": "vitest run"
   },
   "dependencies": {
     "@fontsource/barlow": "^5.3.0",
@@ -26,6 +27,7 @@
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
     "tsx": "^4.23.15",
-    "vite": "^5.4.11"
+    "vite": "^5.4.11",
+    "vitest": "^2.1.8"
   }
 }

@@ -1,7 +1,14 @@
 import { create } from 'zustand';
 import type { HarnessEvent } from '@harness/core/view';
 
-export type Selection = { cell: string } | { edge: string; pair: string } | { unassigned: true };
+/** What the inspector shows: a cell, a v1 domain edge (cell pair), Unassigned; and in v2 a file, any other node, or a drawn edge. */
+export type Selection =
+  | { cell: string }
+  | { edge: string; pair: string }
+  | { unassigned: true }
+  | { file: string }
+  | { node: string }
+  | { link: string };
 
 export type Conn = 'connecting' | 'open' | 'down' | 'fake';
 

@@ -6,7 +6,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { Cell, EventData, EventKind, HarnessEvent, Violation } from '@harness/core/view';
+import type { Cell, EventData, EventKind, FileFacts, HarnessEvent, SymbolDiff, SymbolFact, Violation } from '@harness/core/view';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const base = JSON.parse(readFileSync(join(here, 'base-events.json'), 'utf8')) as HarnessEvent[];
@@ -20,6 +20,21 @@ function ev<K extends EventKind>(kind: K, data: K extends keyof EventData ? Even
   t += extra.gap ?? 1200;
   out.push({ id: `comp-${String(++n).padStart(3, '0')}`, t, session, turn: TURN, kind, ...(extra.cell ? { cell: extra.cell } : {}), ...(extra.path ? { path: extra.path } : {}), data: data as Record<string, unknown> });
 }
+
+// Tier 1 facts after an edit (the server emits `facts_changed` with every `edited`): the scanned facts with a new
+// hash, or for a created file the imports and symbols it was written with.
+const scanned = new Map((base.find((e) => e.kind === 'repo_scanned')?.data as EventData['repo_scanned'] | undefined)?.fileFacts?.map((f) => [f.path, f]) ?? []);
+function factsAfter(path: string, created?: { imports: string[]; symbols: string[] }): FileFacts {
+  const prev = scanned.get(path);
+  if (prev && !created) return { ...prev, hash: `${prev.hash}+${n}` };
+  const sym = (name: string, parent: string | null): SymbolFact => ({
+    id: `${path}#${name}`, file: path, name, kind: parent ? 'method' : 'const', exported: !parent, parent: parent && `${path}#${parent}`,
+    span: { start: 0, end: 0 }, sigHash: name, bodyHash: name,
+  });
+  const symbols = (created?.symbols ?? []).map((s) => sym(s, s.includes('.') ? s.slice(0, s.indexOf('.')) : null));
+  return { path, hash: `new${n}`, imports: (created?.imports ?? []).map((to) => ({ to, typeOnly: false })), writes: [], symbols, calls: [], routes: [], entries: [] };
+}
+const symbolsOf = (f: FileFacts, created: boolean): SymbolDiff => ({ added: created ? f.symbols.map((s) => s.id) : [], removed: [], sig: [], body: created ? [] : f.symbols.slice(0, 1).map((s) => s.id), renamed: [] });
 
 const c = (domain: string, layer: string): Cell => ({ domain, layer });
 const TOOLS = c('tools', 'logic');
@@ -94,7 +109,9 @@ ev('plan_approved', {} as never, { gap: 4200 });
 
 function edit(path: string, cell: Cell, added: number, removed: number) {
   ev('cursor', { verb: 'editing' }, { path, cell, gap: 1400 });
-  ev('edited', { added, removed, created: false, tool: 'Edit' }, { path, cell, gap: 300 });
+  const facts = factsAfter(path);
+  ev('edited', { added, removed, created: false, tool: 'Edit', symbols: symbolsOf(facts, false) }, { path, cell, gap: 300 });
+  ev('facts_changed', { facts }, { path, cell, gap: 5 });
 }
 edit('vendor/sec-edgar/index.ts', TOOLS_EXT, 22, 1);
 edit('src/outreach/draft-email.ts', c('outreach', 'logic'), 3, 1); // not in the plan: amber

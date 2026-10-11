@@ -1,6 +1,6 @@
-// The v2 chrome used for the D1 comps (`&comp=1`): turn rail, breadcrumbs, ledger, legend around the v2 map.
+// The v2 chrome used for the D1 comps (`&comp=1`): turn rail, ledger, legend around the v2 map (which brings its own
+// breadcrumbs and navigation).
 // Everything shown is derived from the event log (useView) plus v2 view state; counts only, never minutes.
-import { domainId } from '@harness/core/view';
 import { useView } from '../derive';
 import { useStore } from '../store';
 import MapV2 from './MapV2';
@@ -12,40 +12,13 @@ export default function CompShell() {
     <div className={`v2-shell theme-${theme}`} data-theme={theme}>
       <TurnRail />
       <header className="v2-top">
-        <Breadcrumbs />
+        <span />
         <Ledger />
       </header>
       <main className="v2-stage">
-        <MapV2 insets={{ top: theme === 'strata' ? 96 : 66, right: 36, bottom: 30, left: 96 }} />
+        <MapV2 insets={{ top: theme === 'strata' ? 130 : 104, right: 36, bottom: 30, left: 96 }} />
       </main>
     </div>
-  );
-}
-
-function Breadcrumbs() {
-  const v = useView();
-  const expanded = useV2((s) => s.expanded);
-  const setExpanded = useV2((s) => s.setExpanded);
-  const cursor = useV2((s) => s.cursor);
-  const map = v.ui.map;
-  const last = expanded.at(-1);
-  const dom = last && map?.domains.find((d) => domainId(d.id) === last);
-  const cell = dom && v.ui.cursor?.cell?.domain === dom.id ? map?.layers.find((l) => l.id === v.ui.cursor?.cell?.layer) : null;
-  const crumbs: { label: string; onClick?: () => void; current?: boolean }[] = [{ label: 'System', onClick: () => setExpanded([]) }];
-  if (dom) crumbs.push({ label: dom.name, onClick: () => setExpanded([last!]) });
-  if (cell) crumbs.push({ label: cell.name });
-  if (cursor && dom && cursor.node === cursor.path) crumbs.push({ label: cursor.path.split('/').pop()! });
-  crumbs[crumbs.length - 1]!.current = true;
-  return (
-    <nav className="v2-crumbs" aria-label="Where you are">
-      <ol>
-        {crumbs.map((c, i) => (
-          <li key={i}>
-            {c.onClick && !c.current ? <button type="button" onClick={c.onClick}>{c.label}</button> : <span aria-current={c.current ? 'location' : undefined}>{c.label}</span>}
-          </li>
-        ))}
-      </ol>
-    </nav>
   );
 }
 

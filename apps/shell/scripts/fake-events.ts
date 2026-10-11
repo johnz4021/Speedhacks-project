@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { Cell, EventData, EventKind, HarnessEvent, Violation } from '@harness/core/view';
+import type { Cell, EventData, EventKind, FileFacts, HarnessEvent, SymbolDiff, SymbolFact, Violation } from '@harness/core/view';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const base = JSON.parse(readFileSync(join(here, 'base-events.json'), 'utf8')) as HarnessEvent[];
@@ -32,6 +32,21 @@ function ev<K extends EventKind>(kind: K, data: K extends keyof EventData ? Even
     data: data as Record<string, unknown>,
   });
 }
+
+// Tier 1 facts after an edit (the server emits `facts_changed` with every `edited`): the scanned facts with a new
+// hash, or for a created file the imports and symbols it was written with.
+const scanned = new Map((base.find((e) => e.kind === 'repo_scanned')?.data as EventData['repo_scanned'] | undefined)?.fileFacts?.map((f) => [f.path, f]) ?? []);
+function factsAfter(path: string, created?: { imports: string[]; symbols: string[] }): FileFacts {
+  const prev = scanned.get(path);
+  if (prev && !created) return { ...prev, hash: `${prev.hash}+${n}` };
+  const sym = (name: string, parent: string | null): SymbolFact => ({
+    id: `${path}#${name}`, file: path, name, kind: parent ? 'method' : 'const', exported: !parent, parent: parent && `${path}#${parent}`,
+    span: { start: 0, end: 0 }, sigHash: name, bodyHash: name,
+  });
+  const symbols = (created?.symbols ?? []).map((s) => sym(s, s.includes('.') ? s.slice(0, s.indexOf('.')) : null));
+  return { path, hash: `new${n}`, imports: (created?.imports ?? []).map((to) => ({ to, typeOnly: false })), writes: [], symbols, calls: [], routes: [], entries: [] };
+}
+const symbolsOf = (f: FileFacts, created: boolean): SymbolDiff => ({ added: created ? f.symbols.map((s) => s.id) : [], removed: [], sig: [], body: created ? [] : f.symbols.slice(0, 1).map((s) => s.id), renamed: [] });
 
 const c = (domain: string, layer: string): Cell => ({ domain, layer });
 const TOOLS_LOGIC = c('tools', 'logic');
@@ -117,13 +132,15 @@ ev('approval_requested', { plan }, { gap: 300 });
 ev('plan_approved', {} as never, { gap: 4200 });
 
 // ---------------------------------------------------------------- build
-function edit(path: string, cell: Cell, added: number, removed: number, created = false, gap = 1400) {
+function edit(path: string, cell: Cell, added: number, removed: number, created?: { imports: string[]; symbols: string[] }, gap = 1400) {
   ev('cursor', { verb: 'editing' }, { path, cell, gap });
   if (created) ev('file_assigned', { placement: { kind: 'cell', domain: cell.domain, layer: cell.layer } }, { path, turn: TURN, gap: 60 });
-  ev('edited', { added, removed, created, tool: created ? 'Write' : 'Edit' }, { path, cell, gap: 300 });
+  const facts = factsAfter(path, created);
+  ev('edited', { added, removed, created: !!created, tool: created ? 'Write' : 'Edit', symbols: symbolsOf(facts, !!created) }, { path, cell, gap: 300 });
+  ev('facts_changed', { facts }, { path, cell, gap: 5 });
 }
 edit('vendor/sec-edgar/index.ts', TOOLS_EXT, 22, 1);
-edit(NEW_TOOL, TOOLS_LOGIC, 64, 0, true);
+edit(NEW_TOOL, TOOLS_LOGIC, 64, 0, { imports: ['vendor/sec-edgar/index.ts', 'src/gateway/complete.ts'], symbols: ['filingSummary', 'filingSummary.run'] });
 ev('edge_added', { edge: { from: NEW_TOOL, to: 'src/gateway/complete.ts' }, from: 'tools', to: 'gateway' }, { gap: 200 });
 edit('src/tools/index.ts', TOOLS_LOGIC, 2, 0);
 edit('src/gateway/redact.ts', GW_LOGIC, 9, 3);

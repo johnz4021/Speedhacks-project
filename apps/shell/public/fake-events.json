@@ -1,8 +1,8 @@
 [
  {
-  "id": "ec04e8cf-35b",
-  "t": 1791745277867,
-  "session": "d4c2b3b9",
+  "id": "dc657eb5-12d",
+  "t": 1791754776123,
+  "session": "f9f298c5",
   "turn": null,
   "kind": "map_confirmed",
   "data": {
@@ -40,7 +40,7 @@
      "*.json",
      "*.md",
      "*.config.ts",
-     ".gitignore",
+     ".*",
      "domains.yaml"
     ],
     "domains": [
@@ -249,9 +249,9 @@
   }
  },
  {
-  "id": "fc3a64b8-047",
-  "t": 1791745277892,
-  "session": "d4c2b3b9",
+  "id": "3fed52ab-0c9",
+  "t": 1791754776160,
+  "session": "f9f298c5",
   "turn": null,
   "kind": "repo_scanned",
   "data": {
@@ -937,13 +937,1904 @@
       }
      ]
     }
+   ],
+   "fileFacts": [
+    {
+     "path": "src/channels/cli.ts",
+     "hash": "36e49571f3ab6173",
+     "imports": [
+      {
+       "to": "src/orchestrator/agent.ts",
+       "typeOnly": false
+      }
+     ],
+     "writes": [],
+     "symbols": [],
+     "calls": [
+      {
+       "from": "src/channels/cli.ts",
+       "to": "src/orchestrator/agent.ts#runAgent",
+       "confidence": "syntactic",
+       "count": 1
+      }
+     ],
+     "routes": [],
+     "entries": [
+      {
+       "id": "entry:cli:scout",
+       "kind": "cli",
+       "file": "src/channels/cli.ts",
+       "symbol": null,
+       "label": "scout"
+      }
+     ]
+    },
+    {
+     "path": "src/channels/routes.ts",
+     "hash": "848b7d5826b56c19",
+     "imports": [
+      {
+       "to": "vendor:node:http",
+       "typeOnly": false
+      },
+      {
+       "to": "src/orchestrator/agent.ts",
+       "typeOnly": false
+      },
+      {
+       "to": "src/channels/validate.ts",
+       "typeOnly": false
+      }
+     ],
+     "writes": [],
+     "symbols": [
+      {
+       "id": "src/channels/routes.ts#server",
+       "file": "src/channels/routes.ts",
+       "name": "server",
+       "kind": "const",
+       "exported": true,
+       "parent": null,
+       "span": {
+        "start": 131,
+        "end": 352
+       },
+       "sigHash": "534a8653b5a472d0",
+       "bodyHash": "d4644f5d64d94cab"
+      }
+     ],
+     "calls": [
+      {
+       "from": "src/channels/routes.ts#server",
+       "to": "vendor:node:http",
+       "confidence": "syntactic",
+       "count": 1
+      },
+      {
+       "from": "src/channels/routes.ts#server",
+       "to": "src/channels/validate.ts#validate",
+       "confidence": "syntactic",
+       "count": 1
+      },
+      {
+       "from": "src/channels/routes.ts#server",
+       "to": "src/orchestrator/agent.ts#runAgent",
+       "confidence": "syntactic",
+       "count": 1
+      }
+     ],
+     "routes": [],
+     "entries": []
+    },
+    {
+     "path": "src/channels/validate.ts",
+     "hash": "43ed6c00bf88517d",
+     "imports": [
+      {
+       "to": "src/shared/types.ts",
+       "typeOnly": true
+      }
+     ],
+     "writes": [],
+     "symbols": [
+      {
+       "id": "src/channels/validate.ts#validate",
+       "file": "src/channels/validate.ts",
+       "name": "validate",
+       "kind": "function",
+       "exported": true,
+       "parent": null,
+       "span": {
+        "start": 52,
+        "end": 152
+       },
+       "sigHash": "21387b3513957620",
+       "bodyHash": "2cbc00234f109193"
+      }
+     ],
+     "calls": [],
+     "routes": [],
+     "entries": []
+    },
+    {
+     "path": "src/gateway/complete.ts",
+     "hash": "ceba52a46f4a0500",
+     "imports": [
+      {
+       "to": "src/shared/db.ts",
+       "typeOnly": false
+      },
+      {
+       "to": "src/gateway/redact.ts",
+       "typeOnly": false
+      },
+      {
+       "to": "src/gateway/providers.ts",
+       "typeOnly": false
+      },
+      {
+       "to": "src/gateway/cost-ledger.ts",
+       "typeOnly": false
+      }
+     ],
+     "writes": [],
+     "symbols": [
+      {
+       "id": "src/gateway/complete.ts#complete",
+       "file": "src/gateway/complete.ts",
+       "name": "complete",
+       "kind": "function",
+       "exported": true,
+       "parent": null,
+       "span": {
+        "start": 151,
+        "end": 407
+       },
+       "sigHash": "58c7ac038afe525f",
+       "bodyHash": "f7f3805cdab77736"
+      }
+     ],
+     "calls": [
+      {
+       "from": "src/gateway/complete.ts#complete",
+       "to": "src/shared/db.ts#db.all",
+       "confidence": "syntactic",
+       "count": 1
+      },
+      {
+       "from": "src/gateway/complete.ts#complete",
+       "to": "src/gateway/redact.ts#redact",
+       "confidence": "syntactic",
+       "count": 1
+      },
+      {
+       "from": "src/gateway/complete.ts#complete",
+       "to": "src/gateway/cost-ledger.ts#logCost",
+       "confidence": "syntactic",
+       "count": 1
+      },
+      {
+       "from": "src/gateway/complete.ts#complete",
+       "to": "src/gateway/providers.ts#provider",
+       "confidence": "syntactic",
+       "count": 1
+      }
+     ],
+     "routes": [],
+     "entries": []
+    },
+    {
+     "path": "src/gateway/cost-ledger.ts",
+     "hash": "e1725d1845fb8bf4",
+     "imports": [
+      {
+       "to": "src/shared/db.ts",
+       "typeOnly": false
+      }
+     ],
+     "writes": [
+      {
+       "table": "cost_log",
+       "symbol": "src/gateway/cost-ledger.ts#logCost",
+       "via": "db"
+      }
+     ],
+     "symbols": [
+      {
+       "id": "src/gateway/cost-ledger.ts#logCost",
+       "file": "src/gateway/cost-ledger.ts",
+       "name": "logCost",
+       "kind": "function",
+       "exported": true,
+       "parent": null,
+       "span": {
+        "start": 35,
+        "end": 145
+       },
+       "sigHash": "ff11adee048e598e",
+       "bodyHash": "f41926cfea8ba7cc"
+      }
+     ],
+     "calls": [
+      {
+       "from": "src/gateway/cost-ledger.ts#logCost",
+       "to": "src/shared/db.ts#db.insert",
+       "confidence": "syntactic",
+       "count": 1
+      }
+     ],
+     "routes": [],
+     "entries": []
+    },
+    {
+     "path": "src/gateway/embed.ts",
+     "hash": "ad2c75595b078784",
+     "imports": [
+      {
+       "to": "vendor/embeddings/index.ts",
+       "typeOnly": false
+      },
+      {
+       "to": "src/gateway/cost-ledger.ts",
+       "typeOnly": false
+      }
+     ],
+     "writes": [],
+     "symbols": [
+      {
+       "id": "src/gateway/embed.ts#embed",
+       "file": "src/gateway/embed.ts",
+       "name": "embed",
+       "kind": "function",
+       "exported": true,
+       "parent": null,
+       "span": {
+        "start": 108,
+        "end": 210
+       },
+       "sigHash": "a609f6f0baa69710",
+       "bodyHash": "e9accb74b914d73d"
+      }
+     ],
+     "calls": [
+      {
+       "from": "src/gateway/embed.ts#embed",
+       "to": "src/gateway/cost-ledger.ts#logCost",
+       "confidence": "syntactic",
+       "count": 1
+      },
+      {
+       "from": "src/gateway/embed.ts#embed",
+       "to": "vendor/embeddings/index.ts#call",
+       "confidence": "syntactic",
+       "count": 1
+      }
+     ],
+     "routes": [],
+     "entries": []
+    },
+    {
+     "path": "src/gateway/providers.ts",
+     "hash": "1e63c62c72f91664",
+     "imports": [
+      {
+       "to": "vendor/llm-openai/index.ts",
+       "typeOnly": false
+      },
+      {
+       "to": "vendor/llm-anthropic/index.ts",
+       "typeOnly": false
+      }
+     ],
+     "writes": [],
+     "symbols": [
+      {
+       "id": "src/gateway/providers.ts#provider",
+       "file": "src/gateway/providers.ts",
+       "name": "provider",
+       "kind": "function",
+       "exported": true,
+       "parent": null,
+       "span": {
+        "start": 134,
+        "end": 236
+       },
+       "sigHash": "3dc5ecf052d7988c",
+       "bodyHash": "46e5be964d0fda6d"
+      }
+     ],
+     "calls": [],
+     "routes": [],
+     "entries": []
+    },
+    {
+     "path": "src/gateway/redact.ts",
+     "hash": "de5f7168f8009698",
+     "imports": [],
+     "writes": [],
+     "symbols": [
+      {
+       "id": "src/gateway/redact.ts#redact",
+       "file": "src/gateway/redact.ts",
+       "name": "redact",
+       "kind": "function",
+       "exported": true,
+       "parent": null,
+       "span": {
+        "start": 0,
+        "end": 125
+       },
+       "sigHash": "7f393438ff34378c",
+       "bodyHash": "260117c470bd6bc3"
+      }
+     ],
+     "calls": [],
+     "routes": [],
+     "entries": []
+    },
+    {
+     "path": "src/memory/notes-store.ts",
+     "hash": "197a6675839b71ba",
+     "imports": [
+      {
+       "to": "src/shared/db.ts",
+       "typeOnly": false
+      }
+     ],
+     "writes": [
+      {
+       "table": "notes",
+       "symbol": "src/memory/notes-store.ts#saveNote",
+       "via": "db"
+      },
+      {
+       "table": "embeddings",
+       "symbol": "src/memory/notes-store.ts#saveNote",
+       "via": "db"
+      }
+     ],
+     "symbols": [
+      {
+       "id": "src/memory/notes-store.ts#saveNote",
+       "file": "src/memory/notes-store.ts",
+       "name": "saveNote",
+       "kind": "function",
+       "exported": true,
+       "parent": null,
+       "span": {
+        "start": 35,
+        "end": 186
+       },
+       "sigHash": "542a321ac5268c7b",
+       "bodyHash": "37fee9f60bafab1c"
+      }
+     ],
+     "calls": [
+      {
+       "from": "src/memory/notes-store.ts#saveNote",
+       "to": "src/shared/db.ts#db.insert",
+       "confidence": "syntactic",
+       "count": 2
+      }
+     ],
+     "routes": [],
+     "entries": []
+    },
+    {
+     "path": "src/memory/retrieve.ts",
+     "hash": "9efd81a4ce8ba5b3",
+     "imports": [
+      {
+       "to": "src/memory/vector-index.ts",
+       "typeOnly": false
+      },
+      {
+       "to": "src/shared/db.ts",
+       "typeOnly": false
+      }
+     ],
+     "writes": [],
+     "symbols": [
+      {
+       "id": "src/memory/retrieve.ts#retrieve",
+       "file": "src/memory/retrieve.ts",
+       "name": "retrieve",
+       "kind": "function",
+       "exported": true,
+       "parent": null,
+       "span": {
+        "start": 75,
+        "end": 187
+       },
+       "sigHash": "3707cdbe88ed8fa3",
+       "bodyHash": "5a7b2c19dde71ca9"
+      }
+     ],
+     "calls": [
+      {
+       "from": "src/memory/retrieve.ts#retrieve",
+       "to": "src/memory/vector-index.ts#index",
+       "confidence": "syntactic",
+       "count": 1
+      },
+      {
+       "from": "src/memory/retrieve.ts#retrieve",
+       "to": "src/shared/db.ts#db.all",
+       "confidence": "syntactic",
+       "count": 1
+      }
+     ],
+     "routes": [],
+     "entries": []
+    },
+    {
+     "path": "src/memory/vector-index.ts",
+     "hash": "d9973aedf992f757",
+     "imports": [
+      {
+       "to": "src/gateway/embed.ts",
+       "typeOnly": false
+      },
+      {
+       "to": "src/memory/notes-store.ts",
+       "typeOnly": false
+      }
+     ],
+     "writes": [],
+     "symbols": [
+      {
+       "id": "src/memory/vector-index.ts#index",
+       "file": "src/memory/vector-index.ts",
+       "name": "index",
+       "kind": "function",
+       "exported": true,
+       "parent": null,
+       "span": {
+        "start": 84,
+        "end": 168
+       },
+       "sigHash": "94edfc966fd70b33",
+       "bodyHash": "ea6c1669cae31171"
+      }
+     ],
+     "calls": [
+      {
+       "from": "src/memory/vector-index.ts#index",
+       "to": "src/memory/notes-store.ts#saveNote",
+       "confidence": "syntactic",
+       "count": 1
+      },
+      {
+       "from": "src/memory/vector-index.ts#index",
+       "to": "src/gateway/embed.ts#embed",
+       "confidence": "syntactic",
+       "count": 1
+      }
+     ],
+     "routes": [],
+     "entries": []
+    },
+    {
+     "path": "src/orchestrator/agent.ts",
+     "hash": "01f76e590c363114",
+     "imports": [
+      {
+       "to": "src/orchestrator/planner.ts",
+       "typeOnly": false
+      },
+      {
+       "to": "src/orchestrator/tool-registry.ts",
+       "typeOnly": false
+      },
+      {
+       "to": "src/orchestrator/run-state.ts",
+       "typeOnly": false
+      },
+      {
+       "to": "src/memory/retrieve.ts",
+       "typeOnly": false
+      },
+      {
+       "to": "src/outreach/draft-email.ts",
+       "typeOnly": false
+      }
+     ],
+     "writes": [],
+     "symbols": [
+      {
+       "id": "src/orchestrator/agent.ts#runAgent",
+       "file": "src/orchestrator/agent.ts",
+       "name": "runAgent",
+       "kind": "function",
+       "exported": true,
+       "parent": null,
+       "span": {
+        "start": 165,
+        "end": 466
+       },
+       "sigHash": "c8caa75a94d446e5",
+       "bodyHash": "742e002f5dff76bb"
+      }
+     ],
+     "calls": [
+      {
+       "from": "src/orchestrator/agent.ts#runAgent",
+       "to": "src/orchestrator/planner.ts#plan",
+       "confidence": "syntactic",
+       "count": 1
+      },
+      {
+       "from": "src/orchestrator/agent.ts#runAgent",
+       "to": "src/memory/retrieve.ts#retrieve",
+       "confidence": "syntactic",
+       "count": 1
+      },
+      {
+       "from": "src/orchestrator/agent.ts#runAgent",
+       "to": "src/orchestrator/run-state.ts#saveRun",
+       "confidence": "syntactic",
+       "count": 1
+      },
+      {
+       "from": "src/orchestrator/agent.ts#runAgent",
+       "to": "src/outreach/draft-email.ts#draftEmail",
+       "confidence": "syntactic",
+       "count": 1
+      }
+     ],
+     "routes": [],
+     "entries": []
+    },
+    {
+     "path": "src/orchestrator/planner.ts",
+     "hash": "e19e1c9633a04390",
+     "imports": [
+      {
+       "to": "src/tools/index.ts",
+       "typeOnly": true
+      },
+      {
+       "to": "src/gateway/complete.ts",
+       "typeOnly": false
+      }
+     ],
+     "writes": [],
+     "symbols": [
+      {
+       "id": "src/orchestrator/planner.ts#plan",
+       "file": "src/orchestrator/planner.ts",
+       "name": "plan",
+       "kind": "function",
+       "exported": true,
+       "parent": null,
+       "span": {
+        "start": 86,
+        "end": 221
+       },
+       "sigHash": "78e9e926d655d1c7",
+       "bodyHash": "dfc93ad02ea317d8"
+      }
+     ],
+     "calls": [
+      {
+       "from": "src/orchestrator/planner.ts#plan",
+       "to": "src/gateway/complete.ts#complete",
+       "confidence": "syntactic",
+       "count": 1
+      }
+     ],
+     "routes": [],
+     "entries": []
+    },
+    {
+     "path": "src/orchestrator/run-state.ts",
+     "hash": "d2e4efb6f9a5410b",
+     "imports": [
+      {
+       "to": "src/shared/db.ts",
+       "typeOnly": false
+      }
+     ],
+     "writes": [
+      {
+       "table": "runs",
+       "symbol": "src/orchestrator/run-state.ts#saveRun",
+       "via": "db"
+      }
+     ],
+     "symbols": [
+      {
+       "id": "src/orchestrator/run-state.ts#saveRun",
+       "file": "src/orchestrator/run-state.ts",
+       "name": "saveRun",
+       "kind": "function",
+       "exported": true,
+       "parent": null,
+       "span": {
+        "start": 35,
+        "end": 176
+       },
+       "sigHash": "e30c823830b58832",
+       "bodyHash": "c5f0a122ae48efb0"
+      }
+     ],
+     "calls": [
+      {
+       "from": "src/orchestrator/run-state.ts#saveRun",
+       "to": "src/shared/db.ts#db.insert",
+       "confidence": "syntactic",
+       "count": 1
+      },
+      {
+       "from": "src/orchestrator/run-state.ts#saveRun",
+       "to": "src/shared/db.ts#db.update",
+       "confidence": "syntactic",
+       "count": 1
+      }
+     ],
+     "routes": [],
+     "entries": []
+    },
+    {
+     "path": "src/orchestrator/tool-registry.ts",
+     "hash": "97b4d33b9747892a",
+     "imports": [
+      {
+       "to": "src/tools/index.ts",
+       "typeOnly": false
+      }
+     ],
+     "writes": [],
+     "symbols": [
+      {
+       "id": "src/orchestrator/tool-registry.ts#registry",
+       "file": "src/orchestrator/tool-registry.ts",
+       "name": "registry",
+       "kind": "const",
+       "exported": true,
+       "parent": null,
+       "span": {
+        "start": 40,
+        "end": 103
+       },
+       "sigHash": "534a8653b5a472d0",
+       "bodyHash": "506ec1438d2c6571"
+      }
+     ],
+     "calls": [
+      {
+       "from": "src/orchestrator/tool-registry.ts#registry",
+       "to": "src/tools/index.ts#tools",
+       "confidence": "syntactic",
+       "count": 1
+      }
+     ],
+     "routes": [],
+     "entries": []
+    },
+    {
+     "path": "src/outreach/crm-sync.ts",
+     "hash": "35d2e0bd138de8e4",
+     "imports": [
+      {
+       "to": "vendor/crm/index.ts",
+       "typeOnly": false
+      },
+      {
+       "to": "src/shared/db.ts",
+       "typeOnly": false
+      }
+     ],
+     "writes": [
+      {
+       "table": "contacts",
+       "symbol": "src/outreach/crm-sync.ts#syncContact",
+       "via": "db"
+      }
+     ],
+     "symbols": [
+      {
+       "id": "src/outreach/crm-sync.ts#syncContact",
+       "file": "src/outreach/crm-sync.ts",
+       "name": "syncContact",
+       "kind": "function",
+       "exported": true,
+       "parent": null,
+       "span": {
+        "start": 89,
+        "end": 248
+       },
+       "sigHash": "d9907db559b6c3f5",
+       "bodyHash": "4bf597673211fcdd"
+      }
+     ],
+     "calls": [
+      {
+       "from": "src/outreach/crm-sync.ts#syncContact",
+       "to": "vendor/crm/index.ts#call",
+       "confidence": "syntactic",
+       "count": 1
+      },
+      {
+       "from": "src/outreach/crm-sync.ts#syncContact",
+       "to": "src/shared/db.ts#db.insert",
+       "confidence": "syntactic",
+       "count": 1
+      },
+      {
+       "from": "src/outreach/crm-sync.ts#syncContact",
+       "to": "src/shared/db.ts#db.update",
+       "confidence": "syntactic",
+       "count": 1
+      }
+     ],
+     "routes": [],
+     "entries": []
+    },
+    {
+     "path": "src/outreach/draft-email.ts",
+     "hash": "65860778264f2a60",
+     "imports": [
+      {
+       "to": "src/gateway/complete.ts",
+       "typeOnly": false
+      }
+     ],
+     "writes": [],
+     "symbols": [
+      {
+       "id": "src/outreach/draft-email.ts#draftEmail",
+       "file": "src/outreach/draft-email.ts",
+       "name": "draftEmail",
+       "kind": "function",
+       "exported": true,
+       "parent": null,
+       "span": {
+        "start": 48,
+        "end": 147
+       },
+       "sigHash": "c8a56772ec41ffca",
+       "bodyHash": "dddabe585f983bf4"
+      }
+     ],
+     "calls": [
+      {
+       "from": "src/outreach/draft-email.ts#draftEmail",
+       "to": "src/gateway/complete.ts#complete",
+       "confidence": "syntactic",
+       "count": 1
+      }
+     ],
+     "routes": [],
+     "entries": []
+    },
+    {
+     "path": "src/outreach/outreach-log.ts",
+     "hash": "fc43e1a7aae4f629",
+     "imports": [
+      {
+       "to": "src/shared/db.ts",
+       "typeOnly": false
+      }
+     ],
+     "writes": [
+      {
+       "table": "outreach_log",
+       "symbol": "src/outreach/outreach-log.ts#logOutreach",
+       "via": "db"
+      }
+     ],
+     "symbols": [
+      {
+       "id": "src/outreach/outreach-log.ts#logOutreach",
+       "file": "src/outreach/outreach-log.ts",
+       "name": "logOutreach",
+       "kind": "function",
+       "exported": true,
+       "parent": null,
+       "span": {
+        "start": 35,
+        "end": 117
+       },
+       "sigHash": "c8f571cacfc89aa6",
+       "bodyHash": "c54d9d7ea84954d9"
+      }
+     ],
+     "calls": [
+      {
+       "from": "src/outreach/outreach-log.ts#logOutreach",
+       "to": "src/shared/db.ts#db.insert",
+       "confidence": "syntactic",
+       "count": 1
+      }
+     ],
+     "routes": [],
+     "entries": []
+    },
+    {
+     "path": "src/outreach/send.ts",
+     "hash": "904faa35fbb664fb",
+     "imports": [
+      {
+       "to": "vendor/email/index.ts",
+       "typeOnly": false
+      },
+      {
+       "to": "src/outreach/outreach-log.ts",
+       "typeOnly": false
+      }
+     ],
+     "writes": [],
+     "symbols": [
+      {
+       "id": "src/outreach/send.ts#send",
+       "file": "src/outreach/send.ts",
+       "name": "send",
+       "kind": "function",
+       "exported": true,
+       "parent": null,
+       "span": {
+        "start": 108,
+        "end": 192
+       },
+       "sigHash": "1963e9cff244537b",
+       "bodyHash": "2badf755eb555e77"
+      }
+     ],
+     "calls": [
+      {
+       "from": "src/outreach/send.ts#send",
+       "to": "vendor/email/index.ts#call",
+       "confidence": "syntactic",
+       "count": 1
+      },
+      {
+       "from": "src/outreach/send.ts#send",
+       "to": "src/outreach/outreach-log.ts#logOutreach",
+       "confidence": "syntactic",
+       "count": 1
+      }
+     ],
+     "routes": [],
+     "entries": []
+    },
+    {
+     "path": "src/shared/db.ts",
+     "hash": "7f1872b08a613c24",
+     "imports": [],
+     "writes": [],
+     "symbols": [
+      {
+       "id": "src/shared/db.ts#db",
+       "file": "src/shared/db.ts",
+       "name": "db",
+       "kind": "const",
+       "exported": true,
+       "parent": null,
+       "span": {
+        "start": 56,
+        "end": 364
+       },
+       "sigHash": "534a8653b5a472d0",
+       "bodyHash": "5199de007880e030"
+      },
+      {
+       "id": "src/shared/db.ts#db.insert",
+       "file": "src/shared/db.ts",
+       "name": "db.insert",
+       "kind": "method",
+       "exported": false,
+       "parent": "src/shared/db.ts#db",
+       "span": {
+        "start": 78,
+        "end": 194
+       },
+       "sigHash": "5e7bf3b2afe647b9",
+       "bodyHash": "d0bb17440cf6cf03"
+      },
+      {
+       "id": "src/shared/db.ts#db.update",
+       "file": "src/shared/db.ts",
+       "name": "db.update",
+       "kind": "method",
+       "exported": false,
+       "parent": "src/shared/db.ts#db",
+       "span": {
+        "start": 198,
+        "end": 285
+       },
+       "sigHash": "72a4f9ad316d8b45",
+       "bodyHash": "76a738513c76ed1c"
+      },
+      {
+       "id": "src/shared/db.ts#db.all",
+       "file": "src/shared/db.ts",
+       "name": "db.all",
+       "kind": "method",
+       "exported": false,
+       "parent": "src/shared/db.ts#db",
+       "span": {
+        "start": 289,
+        "end": 360
+       },
+       "sigHash": "7a06a558e6548186",
+       "bodyHash": "0e00d34b879ab7a3"
+      }
+     ],
+     "calls": [],
+     "routes": [],
+     "entries": []
+    },
+    {
+     "path": "src/shared/types.ts",
+     "hash": "f40a792b271707f6",
+     "imports": [],
+     "writes": [],
+     "symbols": [
+      {
+       "id": "src/shared/types.ts#ToolContext",
+       "file": "src/shared/types.ts",
+       "name": "ToolContext",
+       "kind": "type",
+       "exported": true,
+       "parent": null,
+       "span": {
+        "start": 0,
+        "end": 46
+       },
+       "sigHash": "bf14e086f593a204",
+       "bodyHash": "20a6a366a41651fb"
+      },
+      {
+       "id": "src/shared/types.ts#ToolContext.company",
+       "file": "src/shared/types.ts",
+       "name": "ToolContext.company",
+       "kind": "property",
+       "exported": false,
+       "parent": "src/shared/types.ts#ToolContext",
+       "span": {
+        "start": 28,
+        "end": 43
+       },
+       "sigHash": "ec5a34807288231b",
+       "bodyHash": "7326af4739efc62f"
+      },
+      {
+       "id": "src/shared/types.ts#Tool",
+       "file": "src/shared/types.ts",
+       "name": "Tool",
+       "kind": "type",
+       "exported": true,
+       "parent": null,
+       "span": {
+        "start": 47,
+        "end": 154
+       },
+       "sigHash": "a793b0c01025fae3",
+       "bodyHash": "c1592224879668be"
+      },
+      {
+       "id": "src/shared/types.ts#Tool.name",
+       "file": "src/shared/types.ts",
+       "name": "Tool.name",
+       "kind": "property",
+       "exported": false,
+       "parent": "src/shared/types.ts#Tool",
+       "span": {
+        "start": 68,
+        "end": 81
+       },
+       "sigHash": "a400e28ffdcabb17",
+       "bodyHash": "8bec8472154ae07d"
+      },
+      {
+       "id": "src/shared/types.ts#Tool.tags",
+       "file": "src/shared/types.ts",
+       "name": "Tool.tags",
+       "kind": "property",
+       "exported": false,
+       "parent": "src/shared/types.ts#Tool",
+       "span": {
+        "start": 82,
+        "end": 97
+       },
+       "sigHash": "11173ed5989eaf64",
+       "bodyHash": "70a2e33c0e06ba15"
+      },
+      {
+       "id": "src/shared/types.ts#Tool.run",
+       "file": "src/shared/types.ts",
+       "name": "Tool.run",
+       "kind": "method",
+       "exported": false,
+       "parent": "src/shared/types.ts#Tool",
+       "span": {
+        "start": 98,
+        "end": 151
+       },
+       "sigHash": "025a7163ec12e169",
+       "bodyHash": "3fc4d2daf0c1583d"
+      }
+     ],
+     "calls": [],
+     "routes": [],
+     "entries": []
+    },
+    {
+     "path": "src/tools/company-profile.ts",
+     "hash": "84856559b1851cf5",
+     "imports": [
+      {
+       "to": "src/shared/types.ts",
+       "typeOnly": true
+      },
+      {
+       "to": "vendor/enrichment/index.ts",
+       "typeOnly": false
+      },
+      {
+       "to": "vendor/sec-edgar/index.ts",
+       "typeOnly": false
+      },
+      {
+       "to": "src/gateway/complete.ts",
+       "typeOnly": false
+      }
+     ],
+     "writes": [],
+     "symbols": [
+      {
+       "id": "src/tools/company-profile.ts#companyProfile",
+       "file": "src/tools/company-profile.ts",
+       "name": "companyProfile",
+       "kind": "const",
+       "exported": true,
+       "parent": null,
+       "span": {
+        "start": 221,
+        "end": 398
+       },
+       "sigHash": "28734829388bf660",
+       "bodyHash": "235c5327d702555d"
+      },
+      {
+       "id": "src/tools/company-profile.ts#companyProfile.run",
+       "file": "src/tools/company-profile.ts",
+       "name": "companyProfile.run",
+       "kind": "method",
+       "exported": false,
+       "parent": "src/tools/company-profile.ts#companyProfile",
+       "span": {
+        "start": 309,
+        "end": 394
+       },
+       "sigHash": "487094a6b3412a0d",
+       "bodyHash": "067a3df1487c84d4"
+      }
+     ],
+     "calls": [
+      {
+       "from": "src/tools/company-profile.ts#companyProfile.run",
+       "to": "src/gateway/complete.ts#complete",
+       "confidence": "syntactic",
+       "count": 1
+      },
+      {
+       "from": "src/tools/company-profile.ts#companyProfile.run",
+       "to": "vendor/enrichment/index.ts#call",
+       "confidence": "syntactic",
+       "count": 1
+      },
+      {
+       "from": "src/tools/company-profile.ts#companyProfile.run",
+       "to": "vendor/sec-edgar/index.ts#call",
+       "confidence": "syntactic",
+       "count": 1
+      }
+     ],
+     "routes": [],
+     "entries": []
+    },
+    {
+     "path": "src/tools/index.ts",
+     "hash": "a1274a9e68d121ea",
+     "imports": [
+      {
+       "to": "src/shared/types.ts",
+       "typeOnly": true
+      },
+      {
+       "to": "src/tools/web-search.ts",
+       "typeOnly": false
+      },
+      {
+       "to": "src/tools/company-profile.ts",
+       "typeOnly": false
+      },
+      {
+       "to": "src/tools/news-digest.ts",
+       "typeOnly": false
+      },
+      {
+       "to": "src/tools/news-summarize.ts",
+       "typeOnly": false
+      }
+     ],
+     "writes": [],
+     "symbols": [
+      {
+       "id": "src/tools/index.ts#tools",
+       "file": "src/tools/index.ts",
+       "name": "tools",
+       "kind": "const",
+       "exported": true,
+       "parent": null,
+       "span": {
+        "start": 297,
+        "end": 381
+       },
+       "sigHash": "f6828949c03e5f72",
+       "bodyHash": "cb4ab7ec5c31ad88"
+      }
+     ],
+     "calls": [],
+     "routes": [],
+     "entries": []
+    },
+    {
+     "path": "src/tools/news-digest.ts",
+     "hash": "edc29c3f9ca32215",
+     "imports": [
+      {
+       "to": "src/shared/types.ts",
+       "typeOnly": true
+      },
+      {
+       "to": "vendor/news/index.ts",
+       "typeOnly": false
+      }
+     ],
+     "writes": [],
+     "symbols": [
+      {
+       "id": "src/tools/news-digest.ts#newsDigest",
+       "file": "src/tools/news-digest.ts",
+       "name": "newsDigest",
+       "kind": "const",
+       "exported": true,
+       "parent": null,
+       "span": {
+        "start": 241,
+        "end": 361
+       },
+       "sigHash": "28734829388bf660",
+       "bodyHash": "0c57623d13303b35"
+      },
+      {
+       "id": "src/tools/news-digest.ts#newsDigest.run",
+       "file": "src/tools/news-digest.ts",
+       "name": "newsDigest.run",
+       "kind": "method",
+       "exported": false,
+       "parent": "src/tools/news-digest.ts#newsDigest",
+       "span": {
+        "start": 312,
+        "end": 358
+       },
+       "sigHash": "487094a6b3412a0d",
+       "bodyHash": "c03a22cc567dca99"
+      }
+     ],
+     "calls": [
+      {
+       "from": "src/tools/news-digest.ts#newsDigest.run",
+       "to": "vendor/news/index.ts#call",
+       "confidence": "syntactic",
+       "count": 1
+      }
+     ],
+     "routes": [],
+     "entries": []
+    },
+    {
+     "path": "src/tools/news-summarize.ts",
+     "hash": "336c328c81fe8864",
+     "imports": [
+      {
+       "to": "src/shared/types.ts",
+       "typeOnly": true
+      },
+      {
+       "to": "vendor/news/index.ts",
+       "typeOnly": false
+      },
+      {
+       "to": "vendor/llm-openai/index.ts",
+       "typeOnly": false
+      }
+     ],
+     "writes": [],
+     "symbols": [
+      {
+       "id": "src/tools/news-summarize.ts#newsSummarize",
+       "file": "src/tools/news-summarize.ts",
+       "name": "newsSummarize",
+       "kind": "const",
+       "exported": true,
+       "parent": null,
+       "span": {
+        "start": 155,
+        "end": 296
+       },
+       "sigHash": "28734829388bf660",
+       "bodyHash": "2a5fe7c3386f5198"
+      },
+      {
+       "id": "src/tools/news-summarize.ts#newsSummarize.run",
+       "file": "src/tools/news-summarize.ts",
+       "name": "newsSummarize.run",
+       "kind": "method",
+       "exported": false,
+       "parent": "src/tools/news-summarize.ts#newsSummarize",
+       "span": {
+        "start": 243,
+        "end": 293
+       },
+       "sigHash": "535276cb062edb35",
+       "bodyHash": "05a43fa2d8ca7d7b"
+      }
+     ],
+     "calls": [
+      {
+       "from": "src/tools/news-summarize.ts#newsSummarize.run",
+       "to": "vendor/llm-openai/index.ts#chat",
+       "confidence": "syntactic",
+       "count": 1
+      },
+      {
+       "from": "src/tools/news-summarize.ts#newsSummarize.run",
+       "to": "vendor/news/index.ts#call",
+       "confidence": "syntactic",
+       "count": 1
+      }
+     ],
+     "routes": [],
+     "entries": []
+    },
+    {
+     "path": "src/tools/web-search.ts",
+     "hash": "77836243cef0a091",
+     "imports": [
+      {
+       "to": "src/shared/types.ts",
+       "typeOnly": true
+      },
+      {
+       "to": "vendor/search/index.ts",
+       "typeOnly": false
+      },
+      {
+       "to": "src/gateway/complete.ts",
+       "typeOnly": false
+      }
+     ],
+     "writes": [],
+     "symbols": [
+      {
+       "id": "src/tools/web-search.ts#webSearch",
+       "file": "src/tools/web-search.ts",
+       "name": "webSearch",
+       "kind": "const",
+       "exported": true,
+       "parent": null,
+       "span": {
+        "start": 153,
+        "end": 297
+       },
+       "sigHash": "28734829388bf660",
+       "bodyHash": "58e6cc74f63bd8f2"
+      },
+      {
+       "id": "src/tools/web-search.ts#webSearch.run",
+       "file": "src/tools/web-search.ts",
+       "name": "webSearch.run",
+       "kind": "method",
+       "exported": false,
+       "parent": "src/tools/web-search.ts#webSearch",
+       "span": {
+        "start": 221,
+        "end": 294
+       },
+       "sigHash": "7b6214f041bd574a",
+       "bodyHash": "019d000543e3e490"
+      }
+     ],
+     "calls": [
+      {
+       "from": "src/tools/web-search.ts#webSearch.run",
+       "to": "src/gateway/complete.ts#complete",
+       "confidence": "syntactic",
+       "count": 1
+      },
+      {
+       "from": "src/tools/web-search.ts#webSearch.run",
+       "to": "vendor/search/index.ts#call",
+       "confidence": "syntactic",
+       "count": 1
+      }
+     ],
+     "routes": [],
+     "entries": []
+    },
+    {
+     "path": "test/gateway/complete.test.ts",
+     "hash": "815c4fe25a8971da",
+     "imports": [
+      {
+       "to": "vendor:vitest",
+       "typeOnly": false
+      },
+      {
+       "to": "vendor/llm-openai/index.ts",
+       "typeOnly": false
+      },
+      {
+       "to": "src/gateway/complete.ts",
+       "typeOnly": false
+      }
+     ],
+     "writes": [],
+     "symbols": [
+      {
+       "id": "test/gateway/complete.test.ts#<cb1>",
+       "file": "test/gateway/complete.test.ts",
+       "name": "<cb1>",
+       "kind": "function",
+       "exported": false,
+       "parent": null,
+       "span": {
+        "start": 177,
+        "end": 304
+       },
+       "sigHash": "0eefca929e711903",
+       "bodyHash": "c53be7849caf8c38"
+      }
+     ],
+     "calls": [
+      {
+       "from": "test/gateway/complete.test.ts",
+       "to": "vendor:vitest",
+       "confidence": "syntactic",
+       "count": 1
+      },
+      {
+       "from": "test/gateway/complete.test.ts#<cb1>",
+       "to": "vendor:vitest",
+       "confidence": "syntactic",
+       "count": 2
+      },
+      {
+       "from": "test/gateway/complete.test.ts#<cb1>",
+       "to": "src/gateway/complete.ts#complete",
+       "confidence": "syntactic",
+       "count": 1
+      },
+      {
+       "from": "test/gateway/complete.test.ts#<cb1>",
+       "to": "vendor/llm-openai/index.ts#chat",
+       "confidence": "syntactic",
+       "count": 1
+      }
+     ],
+     "routes": [],
+     "entries": []
+    },
+    {
+     "path": "test/memory/retrieve.test.ts",
+     "hash": "f826d785fe9d1b05",
+     "imports": [
+      {
+       "to": "vendor:vitest",
+       "typeOnly": false
+      },
+      {
+       "to": "src/memory/retrieve.ts",
+       "typeOnly": false
+      }
+     ],
+     "writes": [],
+     "symbols": [
+      {
+       "id": "test/memory/retrieve.test.ts#<cb1>",
+       "file": "test/memory/retrieve.test.ts",
+       "name": "<cb1>",
+       "kind": "function",
+       "exported": false,
+       "parent": null,
+       "span": {
+        "start": 107,
+        "end": 165
+       },
+       "sigHash": "8b24c00e26bd81a0",
+       "bodyHash": "91a3d94389d91ae5"
+      }
+     ],
+     "calls": [
+      {
+       "from": "test/memory/retrieve.test.ts",
+       "to": "vendor:vitest",
+       "confidence": "syntactic",
+       "count": 1
+      },
+      {
+       "from": "test/memory/retrieve.test.ts#<cb1>",
+       "to": "vendor:vitest",
+       "confidence": "syntactic",
+       "count": 1
+      },
+      {
+       "from": "test/memory/retrieve.test.ts#<cb1>",
+       "to": "src/memory/retrieve.ts#retrieve",
+       "confidence": "syntactic",
+       "count": 1
+      }
+     ],
+     "routes": [],
+     "entries": []
+    },
+    {
+     "path": "test/tools/news-digest.test.ts",
+     "hash": "a30593db60ead79b",
+     "imports": [
+      {
+       "to": "vendor:vitest",
+       "typeOnly": false
+      },
+      {
+       "to": "src/tools/news-digest.ts",
+       "typeOnly": false
+      }
+     ],
+     "writes": [],
+     "symbols": [
+      {
+       "id": "test/tools/news-digest.test.ts#<cb1>",
+       "file": "test/tools/news-digest.test.ts",
+       "name": "<cb1>",
+       "kind": "function",
+       "exported": false,
+       "parent": null,
+       "span": {
+        "start": 109,
+        "end": 191
+       },
+       "sigHash": "8b24c00e26bd81a0",
+       "bodyHash": "8f42f7f2e8d63e29"
+      }
+     ],
+     "calls": [
+      {
+       "from": "test/tools/news-digest.test.ts",
+       "to": "vendor:vitest",
+       "confidence": "syntactic",
+       "count": 1
+      },
+      {
+       "from": "test/tools/news-digest.test.ts#<cb1>",
+       "to": "vendor:vitest",
+       "confidence": "syntactic",
+       "count": 1
+      },
+      {
+       "from": "test/tools/news-digest.test.ts#<cb1>",
+       "to": "src/tools/news-digest.ts#newsDigest.run",
+       "confidence": "syntactic",
+       "count": 1
+      }
+     ],
+     "routes": [],
+     "entries": []
+    },
+    {
+     "path": "vendor/_calllog.ts",
+     "hash": "c6e2bc03a3dd35bc",
+     "imports": [],
+     "writes": [],
+     "symbols": [
+      {
+       "id": "vendor/_calllog.ts#calls",
+       "file": "vendor/_calllog.ts",
+       "name": "calls",
+       "kind": "const",
+       "exported": true,
+       "parent": null,
+       "span": {
+        "start": 0,
+        "end": 92
+       },
+       "sigHash": "8a282f2f17e7d2f6",
+       "bodyHash": "741638a5b0565a16"
+      },
+      {
+       "id": "vendor/_calllog.ts#logCall",
+       "file": "vendor/_calllog.ts",
+       "name": "logCall",
+       "kind": "function",
+       "exported": true,
+       "parent": null,
+       "span": {
+        "start": 93,
+        "end": 231
+       },
+       "sigHash": "362c4e93b56c4c19",
+       "bodyHash": "d453fd9b0d4b9404"
+      }
+     ],
+     "calls": [
+      {
+       "from": "vendor/_calllog.ts#logCall",
+       "to": "vendor/_calllog.ts#calls",
+       "confidence": "syntactic",
+       "count": 1
+      }
+     ],
+     "routes": [],
+     "entries": []
+    },
+    {
+     "path": "vendor/crm/index.ts",
+     "hash": "88e12fd315f86613",
+     "imports": [
+      {
+       "to": "vendor/_calllog.ts",
+       "typeOnly": false
+      }
+     ],
+     "writes": [],
+     "symbols": [
+      {
+       "id": "vendor/crm/index.ts#call",
+       "file": "vendor/crm/index.ts",
+       "name": "call",
+       "kind": "function",
+       "exported": true,
+       "parent": null,
+       "span": {
+        "start": 39,
+        "end": 135
+       },
+       "sigHash": "e87c7daa68ded12d",
+       "bodyHash": "bd79d1ecc2c7dbb4"
+      }
+     ],
+     "calls": [
+      {
+       "from": "vendor/crm/index.ts#call",
+       "to": "vendor/_calllog.ts#logCall",
+       "confidence": "syntactic",
+       "count": 1
+      }
+     ],
+     "routes": [],
+     "entries": []
+    },
+    {
+     "path": "vendor/email/index.ts",
+     "hash": "65372933fbd2dd48",
+     "imports": [
+      {
+       "to": "vendor/_calllog.ts",
+       "typeOnly": false
+      }
+     ],
+     "writes": [],
+     "symbols": [
+      {
+       "id": "vendor/email/index.ts#call",
+       "file": "vendor/email/index.ts",
+       "name": "call",
+       "kind": "function",
+       "exported": true,
+       "parent": null,
+       "span": {
+        "start": 39,
+        "end": 137
+       },
+       "sigHash": "e87c7daa68ded12d",
+       "bodyHash": "3c3309d82f94df00"
+      }
+     ],
+     "calls": [
+      {
+       "from": "vendor/email/index.ts#call",
+       "to": "vendor/_calllog.ts#logCall",
+       "confidence": "syntactic",
+       "count": 1
+      }
+     ],
+     "routes": [],
+     "entries": []
+    },
+    {
+     "path": "vendor/embeddings/index.ts",
+     "hash": "96f31c5be590c766",
+     "imports": [
+      {
+       "to": "vendor/_calllog.ts",
+       "typeOnly": false
+      }
+     ],
+     "writes": [],
+     "symbols": [
+      {
+       "id": "vendor/embeddings/index.ts#call",
+       "file": "vendor/embeddings/index.ts",
+       "name": "call",
+       "kind": "function",
+       "exported": true,
+       "parent": null,
+       "span": {
+        "start": 39,
+        "end": 142
+       },
+       "sigHash": "e87c7daa68ded12d",
+       "bodyHash": "984b1e2a0bd53eb0"
+      }
+     ],
+     "calls": [
+      {
+       "from": "vendor/embeddings/index.ts#call",
+       "to": "vendor/_calllog.ts#logCall",
+       "confidence": "syntactic",
+       "count": 1
+      }
+     ],
+     "routes": [],
+     "entries": []
+    },
+    {
+     "path": "vendor/enrichment/index.ts",
+     "hash": "ba1af28ed70c66ca",
+     "imports": [
+      {
+       "to": "vendor/_calllog.ts",
+       "typeOnly": false
+      }
+     ],
+     "writes": [],
+     "symbols": [
+      {
+       "id": "vendor/enrichment/index.ts#call",
+       "file": "vendor/enrichment/index.ts",
+       "name": "call",
+       "kind": "function",
+       "exported": true,
+       "parent": null,
+       "span": {
+        "start": 39,
+        "end": 142
+       },
+       "sigHash": "e87c7daa68ded12d",
+       "bodyHash": "e25c4de9d7f01b23"
+      }
+     ],
+     "calls": [
+      {
+       "from": "vendor/enrichment/index.ts#call",
+       "to": "vendor/_calllog.ts#logCall",
+       "confidence": "syntactic",
+       "count": 1
+      }
+     ],
+     "routes": [],
+     "entries": []
+    },
+    {
+     "path": "vendor/llm-anthropic/index.ts",
+     "hash": "85a74db1537f4cb4",
+     "imports": [
+      {
+       "to": "vendor/_calllog.ts",
+       "typeOnly": false
+      }
+     ],
+     "writes": [],
+     "symbols": [
+      {
+       "id": "vendor/llm-anthropic/index.ts#call",
+       "file": "vendor/llm-anthropic/index.ts",
+       "name": "call",
+       "kind": "function",
+       "exported": true,
+       "parent": null,
+       "span": {
+        "start": 39,
+        "end": 145
+       },
+       "sigHash": "e87c7daa68ded12d",
+       "bodyHash": "e2412d0a5e8cf744"
+      }
+     ],
+     "calls": [
+      {
+       "from": "vendor/llm-anthropic/index.ts#call",
+       "to": "vendor/_calllog.ts#logCall",
+       "confidence": "syntactic",
+       "count": 1
+      }
+     ],
+     "routes": [],
+     "entries": []
+    },
+    {
+     "path": "vendor/llm-openai/index.ts",
+     "hash": "5feed4568cde8e51",
+     "imports": [
+      {
+       "to": "vendor/_calllog.ts",
+       "typeOnly": false
+      }
+     ],
+     "writes": [],
+     "symbols": [
+      {
+       "id": "vendor/llm-openai/index.ts#call",
+       "file": "vendor/llm-openai/index.ts",
+       "name": "call",
+       "kind": "function",
+       "exported": true,
+       "parent": null,
+       "span": {
+        "start": 39,
+        "end": 142
+       },
+       "sigHash": "e87c7daa68ded12d",
+       "bodyHash": "baf85f8093327127"
+      },
+      {
+       "id": "vendor/llm-openai/index.ts#chat",
+       "file": "vendor/llm-openai/index.ts",
+       "name": "chat",
+       "kind": "function",
+       "exported": true,
+       "parent": null,
+       "span": {
+        "start": 143,
+        "end": 168
+       },
+       "sigHash": "cde8cb20e5564678",
+       "bodyHash": "b3f184a9a549cae6"
+      }
+     ],
+     "calls": [
+      {
+       "from": "vendor/llm-openai/index.ts#call",
+       "to": "vendor/_calllog.ts#logCall",
+       "confidence": "syntactic",
+       "count": 1
+      }
+     ],
+     "routes": [],
+     "entries": []
+    },
+    {
+     "path": "vendor/news/index.ts",
+     "hash": "57e4ec205b107717",
+     "imports": [
+      {
+       "to": "vendor/_calllog.ts",
+       "typeOnly": false
+      }
+     ],
+     "writes": [],
+     "symbols": [
+      {
+       "id": "vendor/news/index.ts#call",
+       "file": "vendor/news/index.ts",
+       "name": "call",
+       "kind": "function",
+       "exported": true,
+       "parent": null,
+       "span": {
+        "start": 39,
+        "end": 136
+       },
+       "sigHash": "e87c7daa68ded12d",
+       "bodyHash": "769d756b29a1da88"
+      }
+     ],
+     "calls": [
+      {
+       "from": "vendor/news/index.ts#call",
+       "to": "vendor/_calllog.ts#logCall",
+       "confidence": "syntactic",
+       "count": 1
+      }
+     ],
+     "routes": [],
+     "entries": []
+    },
+    {
+     "path": "vendor/search/index.ts",
+     "hash": "99c6cea1b95f3d04",
+     "imports": [
+      {
+       "to": "vendor/_calllog.ts",
+       "typeOnly": false
+      }
+     ],
+     "writes": [],
+     "symbols": [
+      {
+       "id": "vendor/search/index.ts#call",
+       "file": "vendor/search/index.ts",
+       "name": "call",
+       "kind": "function",
+       "exported": true,
+       "parent": null,
+       "span": {
+        "start": 39,
+        "end": 138
+       },
+       "sigHash": "e87c7daa68ded12d",
+       "bodyHash": "b699a51cb5a9dff0"
+      }
+     ],
+     "calls": [
+      {
+       "from": "vendor/search/index.ts#call",
+       "to": "vendor/_calllog.ts#logCall",
+       "confidence": "syntactic",
+       "count": 1
+      }
+     ],
+     "routes": [],
+     "entries": []
+    },
+    {
+     "path": "vendor/sec-edgar/index.ts",
+     "hash": "b55fa4085294de98",
+     "imports": [
+      {
+       "to": "vendor/_calllog.ts",
+       "typeOnly": false
+      }
+     ],
+     "writes": [],
+     "symbols": [
+      {
+       "id": "vendor/sec-edgar/index.ts#call",
+       "file": "vendor/sec-edgar/index.ts",
+       "name": "call",
+       "kind": "function",
+       "exported": true,
+       "parent": null,
+       "span": {
+        "start": 39,
+        "end": 141
+       },
+       "sigHash": "e87c7daa68ded12d",
+       "bodyHash": "7c6e69b923229060"
+      }
+     ],
+     "calls": [
+      {
+       "from": "vendor/sec-edgar/index.ts#call",
+       "to": "vendor/_calllog.ts#logCall",
+       "confidence": "syntactic",
+       "count": 1
+      }
+     ],
+     "routes": [],
+     "entries": []
+    }
    ]
   }
  },
  {
-  "id": "fe9f826d-c76",
-  "t": 1791745277893,
-  "session": "d4c2b3b9",
+  "id": "79cd465a-896",
+  "t": 1791754776161,
+  "session": "f9f298c5",
   "turn": null,
   "kind": "violation_found",
   "data": {
@@ -965,8 +2856,8 @@
  },
  {
   "id": "fake-001",
-  "t": 1791745337893,
-  "session": "d4c2b3b9",
+  "t": 1791754836161,
+  "session": "f9f298c5",
   "turn": "t10kfs",
   "kind": "turn_started",
   "data": {
@@ -977,8 +2868,8 @@
  },
  {
   "id": "fake-002",
-  "t": 1791745337943,
-  "session": "d4c2b3b9",
+  "t": 1791754836211,
+  "session": "f9f298c5",
   "turn": "t10kfs",
   "kind": "chat",
   "data": {
@@ -988,8 +2879,8 @@
  },
  {
   "id": "fake-003",
-  "t": 1791745339743,
-  "session": "d4c2b3b9",
+  "t": 1791754838011,
+  "session": "f9f298c5",
   "turn": "t10kfs",
   "kind": "looked",
   "cell": {
@@ -1003,8 +2894,8 @@
  },
  {
   "id": "fake-004",
-  "t": 1791745340943,
-  "session": "d4c2b3b9",
+  "t": 1791754839211,
+  "session": "f9f298c5",
   "turn": "t10kfs",
   "kind": "looked",
   "cell": {
@@ -1018,8 +2909,8 @@
  },
  {
   "id": "fake-005",
-  "t": 1791745342143,
-  "session": "d4c2b3b9",
+  "t": 1791754840411,
+  "session": "f9f298c5",
   "turn": "t10kfs",
   "kind": "cursor",
   "cell": {
@@ -1033,8 +2924,8 @@
  },
  {
   "id": "fake-006",
-  "t": 1791745343343,
-  "session": "d4c2b3b9",
+  "t": 1791754841611,
+  "session": "f9f298c5",
   "turn": "t10kfs",
   "kind": "looked",
   "cell": {
@@ -1048,8 +2939,8 @@
  },
  {
   "id": "fake-007",
-  "t": 1791745344543,
-  "session": "d4c2b3b9",
+  "t": 1791754842811,
+  "session": "f9f298c5",
   "turn": "t10kfs",
   "kind": "looked",
   "cell": {
@@ -1063,8 +2954,8 @@
  },
  {
   "id": "fake-008",
-  "t": 1791745345743,
-  "session": "d4c2b3b9",
+  "t": 1791754844011,
+  "session": "f9f298c5",
   "turn": "t10kfs",
   "kind": "chat",
   "data": {
@@ -1074,8 +2965,8 @@
  },
  {
   "id": "fake-009",
-  "t": 1791745348143,
-  "session": "d4c2b3b9",
+  "t": 1791754846411,
+  "session": "f9f298c5",
   "turn": "t10kfs",
   "kind": "planned",
   "data": {
@@ -1166,8 +3057,8 @@
  },
  {
   "id": "fake-010",
-  "t": 1791745348183,
-  "session": "d4c2b3b9",
+  "t": 1791754846451,
+  "session": "f9f298c5",
   "turn": "t10kfs",
   "kind": "plan_violation",
   "data": {
@@ -1187,8 +3078,8 @@
  },
  {
   "id": "fake-011",
-  "t": 1791745350383,
-  "session": "d4c2b3b9",
+  "t": 1791754848651,
+  "session": "f9f298c5",
   "turn": "t10kfs",
   "kind": "chat",
   "data": {
@@ -1198,8 +3089,8 @@
  },
  {
   "id": "fake-012",
-  "t": 1791745350413,
-  "session": "d4c2b3b9",
+  "t": 1791754848681,
+  "session": "f9f298c5",
   "turn": "t10kfs",
   "kind": "fork_asked",
   "data": {
@@ -1222,8 +3113,8 @@
  },
  {
   "id": "fake-013",
-  "t": 1791745355613,
-  "session": "d4c2b3b9",
+  "t": 1791754853881,
+  "session": "f9f298c5",
   "turn": "t10kfs",
   "kind": "chat",
   "data": {
@@ -1233,8 +3124,8 @@
  },
  {
   "id": "fake-014",
-  "t": 1791745355633,
-  "session": "d4c2b3b9",
+  "t": 1791754853901,
+  "session": "f9f298c5",
   "turn": "t10kfs",
   "kind": "fork_answered",
   "data": {
@@ -1258,8 +3149,8 @@
  },
  {
   "id": "fake-015",
-  "t": 1791745355933,
-  "session": "d4c2b3b9",
+  "t": 1791754854201,
+  "session": "f9f298c5",
   "turn": "t10kfs",
   "kind": "decision_recorded",
   "data": {
@@ -1274,8 +3165,8 @@
  },
  {
   "id": "fake-016",
-  "t": 1791745358933,
-  "session": "d4c2b3b9",
+  "t": 1791754857201,
+  "session": "f9f298c5",
   "turn": "t10kfs",
   "kind": "planned",
   "data": {
@@ -1384,8 +3275,8 @@
  },
  {
   "id": "fake-017",
-  "t": 1791745359833,
-  "session": "d4c2b3b9",
+  "t": 1791754858101,
+  "session": "f9f298c5",
   "turn": "t10kfs",
   "kind": "chat",
   "data": {
@@ -1395,8 +3286,8 @@
  },
  {
   "id": "fake-018",
-  "t": 1791745360133,
-  "session": "d4c2b3b9",
+  "t": 1791754858401,
+  "session": "f9f298c5",
   "turn": "t10kfs",
   "kind": "approval_requested",
   "data": {
@@ -1405,16 +3296,16 @@
  },
  {
   "id": "fake-019",
-  "t": 1791745364333,
-  "session": "d4c2b3b9",
+  "t": 1791754862601,
+  "session": "f9f298c5",
   "turn": "t10kfs",
   "kind": "plan_approved",
   "data": {}
  },
  {
   "id": "fake-020",
-  "t": 1791745365733,
-  "session": "d4c2b3b9",
+  "t": 1791754864001,
+  "session": "f9f298c5",
   "turn": "t10kfs",
   "kind": "cursor",
   "cell": {
@@ -1428,8 +3319,8 @@
  },
  {
   "id": "fake-021",
-  "t": 1791745366033,
-  "session": "d4c2b3b9",
+  "t": 1791754864301,
+  "session": "f9f298c5",
   "turn": "t10kfs",
   "kind": "edited",
   "cell": {
@@ -1441,13 +3332,73 @@
    "added": 22,
    "removed": 1,
    "created": false,
-   "tool": "Edit"
+   "tool": "Edit",
+   "symbols": {
+    "added": [],
+    "removed": [],
+    "sig": [],
+    "body": [
+     "vendor/sec-edgar/index.ts#call"
+    ],
+    "renamed": []
+   }
   }
  },
  {
   "id": "fake-022",
-  "t": 1791745367433,
-  "session": "d4c2b3b9",
+  "t": 1791754864306,
+  "session": "f9f298c5",
+  "turn": "t10kfs",
+  "kind": "facts_changed",
+  "cell": {
+   "domain": "tools",
+   "layer": "external"
+  },
+  "path": "vendor/sec-edgar/index.ts",
+  "data": {
+   "facts": {
+    "path": "vendor/sec-edgar/index.ts",
+    "hash": "b55fa4085294de98+20",
+    "imports": [
+     {
+      "to": "vendor/_calllog.ts",
+      "typeOnly": false
+     }
+    ],
+    "writes": [],
+    "symbols": [
+     {
+      "id": "vendor/sec-edgar/index.ts#call",
+      "file": "vendor/sec-edgar/index.ts",
+      "name": "call",
+      "kind": "function",
+      "exported": true,
+      "parent": null,
+      "span": {
+       "start": 39,
+       "end": 141
+      },
+      "sigHash": "e87c7daa68ded12d",
+      "bodyHash": "7c6e69b923229060"
+     }
+    ],
+    "calls": [
+     {
+      "from": "vendor/sec-edgar/index.ts#call",
+      "to": "vendor/_calllog.ts#logCall",
+      "confidence": "syntactic",
+      "count": 1
+     }
+    ],
+    "routes": [],
+    "entries": []
+   }
+  }
+ },
+ {
+  "id": "fake-023",
+  "t": 1791754865706,
+  "session": "f9f298c5",
   "turn": "t10kfs",
   "kind": "cursor",
   "cell": {
@@ -1460,9 +3411,9 @@
   }
  },
  {
-  "id": "fake-023",
-  "t": 1791745367493,
-  "session": "d4c2b3b9",
+  "id": "fake-024",
+  "t": 1791754865766,
+  "session": "f9f298c5",
   "turn": "t10kfs",
   "kind": "file_assigned",
   "path": "src/tools/filing-summary.ts",
@@ -1475,9 +3426,9 @@
   }
  },
  {
-  "id": "fake-024",
-  "t": 1791745367793,
-  "session": "d4c2b3b9",
+  "id": "fake-025",
+  "t": 1791754866066,
+  "session": "f9f298c5",
   "turn": "t10kfs",
   "kind": "edited",
   "cell": {
@@ -1489,13 +3440,85 @@
    "added": 64,
    "removed": 0,
    "created": true,
-   "tool": "Write"
+   "tool": "Write",
+   "symbols": {
+    "added": [
+     "src/tools/filing-summary.ts#filingSummary",
+     "src/tools/filing-summary.ts#filingSummary.run"
+    ],
+    "removed": [],
+    "sig": [],
+    "body": [],
+    "renamed": []
+   }
   }
  },
  {
-  "id": "fake-025",
-  "t": 1791745367993,
-  "session": "d4c2b3b9",
+  "id": "fake-026",
+  "t": 1791754866071,
+  "session": "f9f298c5",
+  "turn": "t10kfs",
+  "kind": "facts_changed",
+  "cell": {
+   "domain": "tools",
+   "layer": "logic"
+  },
+  "path": "src/tools/filing-summary.ts",
+  "data": {
+   "facts": {
+    "path": "src/tools/filing-summary.ts",
+    "hash": "new24",
+    "imports": [
+     {
+      "to": "vendor/sec-edgar/index.ts",
+      "typeOnly": false
+     },
+     {
+      "to": "src/gateway/complete.ts",
+      "typeOnly": false
+     }
+    ],
+    "writes": [],
+    "symbols": [
+     {
+      "id": "src/tools/filing-summary.ts#filingSummary",
+      "file": "src/tools/filing-summary.ts",
+      "name": "filingSummary",
+      "kind": "const",
+      "exported": true,
+      "parent": null,
+      "span": {
+       "start": 0,
+       "end": 0
+      },
+      "sigHash": "filingSummary",
+      "bodyHash": "filingSummary"
+     },
+     {
+      "id": "src/tools/filing-summary.ts#filingSummary.run",
+      "file": "src/tools/filing-summary.ts",
+      "name": "filingSummary.run",
+      "kind": "method",
+      "exported": false,
+      "parent": "src/tools/filing-summary.ts#filingSummary",
+      "span": {
+       "start": 0,
+       "end": 0
+      },
+      "sigHash": "filingSummary.run",
+      "bodyHash": "filingSummary.run"
+     }
+    ],
+    "calls": [],
+    "routes": [],
+    "entries": []
+   }
+  }
+ },
+ {
+  "id": "fake-027",
+  "t": 1791754866271,
+  "session": "f9f298c5",
   "turn": "t10kfs",
   "kind": "edge_added",
   "data": {
@@ -1508,9 +3531,9 @@
   }
  },
  {
-  "id": "fake-026",
-  "t": 1791745369393,
-  "session": "d4c2b3b9",
+  "id": "fake-028",
+  "t": 1791754867671,
+  "session": "f9f298c5",
   "turn": "t10kfs",
   "kind": "cursor",
   "cell": {
@@ -1523,9 +3546,9 @@
   }
  },
  {
-  "id": "fake-027",
-  "t": 1791745369693,
-  "session": "d4c2b3b9",
+  "id": "fake-029",
+  "t": 1791754867971,
+  "session": "f9f298c5",
   "turn": "t10kfs",
   "kind": "edited",
   "cell": {
@@ -1537,13 +3560,82 @@
    "added": 2,
    "removed": 0,
    "created": false,
-   "tool": "Edit"
+   "tool": "Edit",
+   "symbols": {
+    "added": [],
+    "removed": [],
+    "sig": [],
+    "body": [
+     "src/tools/index.ts#tools"
+    ],
+    "renamed": []
+   }
   }
  },
  {
-  "id": "fake-028",
-  "t": 1791745371093,
-  "session": "d4c2b3b9",
+  "id": "fake-030",
+  "t": 1791754867976,
+  "session": "f9f298c5",
+  "turn": "t10kfs",
+  "kind": "facts_changed",
+  "cell": {
+   "domain": "tools",
+   "layer": "logic"
+  },
+  "path": "src/tools/index.ts",
+  "data": {
+   "facts": {
+    "path": "src/tools/index.ts",
+    "hash": "a1274a9e68d121ea+28",
+    "imports": [
+     {
+      "to": "src/shared/types.ts",
+      "typeOnly": true
+     },
+     {
+      "to": "src/tools/web-search.ts",
+      "typeOnly": false
+     },
+     {
+      "to": "src/tools/company-profile.ts",
+      "typeOnly": false
+     },
+     {
+      "to": "src/tools/news-digest.ts",
+      "typeOnly": false
+     },
+     {
+      "to": "src/tools/news-summarize.ts",
+      "typeOnly": false
+     }
+    ],
+    "writes": [],
+    "symbols": [
+     {
+      "id": "src/tools/index.ts#tools",
+      "file": "src/tools/index.ts",
+      "name": "tools",
+      "kind": "const",
+      "exported": true,
+      "parent": null,
+      "span": {
+       "start": 297,
+       "end": 381
+      },
+      "sigHash": "f6828949c03e5f72",
+      "bodyHash": "cb4ab7ec5c31ad88"
+     }
+    ],
+    "calls": [],
+    "routes": [],
+    "entries": []
+   }
+  }
+ },
+ {
+  "id": "fake-031",
+  "t": 1791754869376,
+  "session": "f9f298c5",
   "turn": "t10kfs",
   "kind": "cursor",
   "cell": {
@@ -1556,9 +3648,9 @@
   }
  },
  {
-  "id": "fake-029",
-  "t": 1791745371393,
-  "session": "d4c2b3b9",
+  "id": "fake-032",
+  "t": 1791754869676,
+  "session": "f9f298c5",
   "turn": "t10kfs",
   "kind": "edited",
   "cell": {
@@ -1570,13 +3662,61 @@
    "added": 9,
    "removed": 3,
    "created": false,
-   "tool": "Edit"
+   "tool": "Edit",
+   "symbols": {
+    "added": [],
+    "removed": [],
+    "sig": [],
+    "body": [
+     "src/gateway/redact.ts#redact"
+    ],
+    "renamed": []
+   }
   }
  },
  {
-  "id": "fake-030",
-  "t": 1791745372793,
-  "session": "d4c2b3b9",
+  "id": "fake-033",
+  "t": 1791754869681,
+  "session": "f9f298c5",
+  "turn": "t10kfs",
+  "kind": "facts_changed",
+  "cell": {
+   "domain": "gateway",
+   "layer": "logic"
+  },
+  "path": "src/gateway/redact.ts",
+  "data": {
+   "facts": {
+    "path": "src/gateway/redact.ts",
+    "hash": "de5f7168f8009698+31",
+    "imports": [],
+    "writes": [],
+    "symbols": [
+     {
+      "id": "src/gateway/redact.ts#redact",
+      "file": "src/gateway/redact.ts",
+      "name": "redact",
+      "kind": "function",
+      "exported": true,
+      "parent": null,
+      "span": {
+       "start": 0,
+       "end": 125
+      },
+      "sigHash": "7f393438ff34378c",
+      "bodyHash": "260117c470bd6bc3"
+     }
+    ],
+    "calls": [],
+    "routes": [],
+    "entries": []
+   }
+  }
+ },
+ {
+  "id": "fake-034",
+  "t": 1791754871081,
+  "session": "f9f298c5",
   "turn": "t10kfs",
   "kind": "cursor",
   "cell": {
@@ -1589,9 +3729,9 @@
   }
  },
  {
-  "id": "fake-031",
-  "t": 1791745373093,
-  "session": "d4c2b3b9",
+  "id": "fake-035",
+  "t": 1791754871381,
+  "session": "f9f298c5",
   "turn": "t10kfs",
   "kind": "edited",
   "cell": {
@@ -1603,13 +3743,73 @@
    "added": 3,
    "removed": 1,
    "created": false,
-   "tool": "Edit"
+   "tool": "Edit",
+   "symbols": {
+    "added": [],
+    "removed": [],
+    "sig": [],
+    "body": [
+     "src/outreach/draft-email.ts#draftEmail"
+    ],
+    "renamed": []
+   }
   }
  },
  {
-  "id": "fake-032",
-  "t": 1791745374493,
-  "session": "d4c2b3b9",
+  "id": "fake-036",
+  "t": 1791754871386,
+  "session": "f9f298c5",
+  "turn": "t10kfs",
+  "kind": "facts_changed",
+  "cell": {
+   "domain": "outreach",
+   "layer": "logic"
+  },
+  "path": "src/outreach/draft-email.ts",
+  "data": {
+   "facts": {
+    "path": "src/outreach/draft-email.ts",
+    "hash": "65860778264f2a60+34",
+    "imports": [
+     {
+      "to": "src/gateway/complete.ts",
+      "typeOnly": false
+     }
+    ],
+    "writes": [],
+    "symbols": [
+     {
+      "id": "src/outreach/draft-email.ts#draftEmail",
+      "file": "src/outreach/draft-email.ts",
+      "name": "draftEmail",
+      "kind": "function",
+      "exported": true,
+      "parent": null,
+      "span": {
+       "start": 48,
+       "end": 147
+      },
+      "sigHash": "c8a56772ec41ffca",
+      "bodyHash": "dddabe585f983bf4"
+     }
+    ],
+    "calls": [
+     {
+      "from": "src/outreach/draft-email.ts#draftEmail",
+      "to": "src/gateway/complete.ts#complete",
+      "confidence": "syntactic",
+      "count": 1
+     }
+    ],
+    "routes": [],
+    "entries": []
+   }
+  }
+ },
+ {
+  "id": "fake-037",
+  "t": 1791754872786,
+  "session": "f9f298c5",
   "turn": "t10kfs",
   "kind": "cursor",
   "path": "test/tools/filing-summary.test.ts",
@@ -1618,9 +3818,9 @@
   }
  },
  {
-  "id": "fake-033",
-  "t": 1791745374553,
-  "session": "d4c2b3b9",
+  "id": "fake-038",
+  "t": 1791754872846,
+  "session": "f9f298c5",
   "turn": "t10kfs",
   "kind": "file_assigned",
   "path": "test/tools/filing-summary.test.ts",
@@ -1632,9 +3832,9 @@
   }
  },
  {
-  "id": "fake-034",
-  "t": 1791745374853,
-  "session": "d4c2b3b9",
+  "id": "fake-039",
+  "t": 1791754873146,
+  "session": "f9f298c5",
   "turn": "t10kfs",
   "kind": "edited",
   "path": "test/tools/filing-summary.test.ts",
@@ -1646,9 +3846,9 @@
   }
  },
  {
-  "id": "fake-035",
-  "t": 1791745375753,
-  "session": "d4c2b3b9",
+  "id": "fake-040",
+  "t": 1791754874046,
+  "session": "f9f298c5",
   "turn": "t10kfs",
   "kind": "decision_recorded",
   "data": {
@@ -1663,9 +3863,9 @@
   }
  },
  {
-  "id": "fake-036",
-  "t": 1791745377353,
-  "session": "d4c2b3b9",
+  "id": "fake-041",
+  "t": 1791754875646,
+  "session": "f9f298c5",
   "turn": "t10kfs",
   "kind": "chat",
   "data": {
@@ -1674,9 +3874,9 @@
   }
  },
  {
-  "id": "fake-037",
-  "t": 1791745377553,
-  "session": "d4c2b3b9",
+  "id": "fake-042",
+  "t": 1791754875846,
+  "session": "f9f298c5",
   "turn": "t10kfs",
   "kind": "turn_ended",
   "data": {
