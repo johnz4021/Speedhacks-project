@@ -7,8 +7,8 @@ import { join } from 'node:path';
 import { Hono } from 'hono';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import {
-  buildGraph, computeJourneys, findFetchSites, inferDispatch, journeyHash, reduce,
-  type ContextGraph, type FileFacts, type Journey,
+  buildGraph, computeJourneys, fetchEdges, findFetchSites, inferDispatch, journeyHash, reduce,
+  type ContextGraph, type FetchEdge, type FileFacts, type Journey, type SourceFile,
 } from '@harness/core';
 import type { Bus } from '../bus';
 import type { Repo } from '../repo';
@@ -60,15 +60,25 @@ export function describeStep(graph: ContextGraph, step: Journey['steps'][number]
   return `${step.kind}: ${n?.label ?? step.node}${where !== n?.label ? ` (${where})` : ''}`;
 }
 
-/** Journeys for the repo's current facts and sources (deterministic; names are placeholders). */
-export function journeysFor(repo: Repo): { journeys: Journey[]; graph: ContextGraph } {
-  const facts: Record<string, FileFacts> = Object.fromEntries(repo.fileFacts);
-  const sources = Object.values(facts).flatMap((f) => {
+/** Every code file's current text with its symbols (fetch sites and dispatch are read from source text). */
+export function sourcesOf(repo: Repo, facts: Readonly<Record<string, FileFacts>> = Object.fromEntries(repo.fileFacts)): SourceFile[] {
+  return Object.values(facts).flatMap((f) => {
     const source = repo.current(f.path);
     return source === null ? [] : [{ path: f.path, source, symbols: f.symbols }];
   });
-  const graph = buildGraph(repo.map, facts);
-  return { journeys: computeJourneys(graph, facts, findFetchSites(sources), inferDispatch(sources, facts)), graph };
+}
+
+/** The repo's UI → route `fetches` edges, for `buildGraph` (deterministic; from source text). */
+export const repoFetchEdges = (repo: Repo, facts: Readonly<Record<string, FileFacts>> = Object.fromEntries(repo.fileFacts)): FetchEdge[] =>
+  fetchEdges(findFetchSites(sourcesOf(repo, facts)), facts);
+
+/** Journeys for the repo's current facts and sources (deterministic; names are placeholders). */
+export function journeysFor(repo: Repo): { journeys: Journey[]; graph: ContextGraph } {
+  const facts: Record<string, FileFacts> = Object.fromEntries(repo.fileFacts);
+  const sources = sourcesOf(repo, facts);
+  const sites = findFetchSites(sources);
+  const graph = buildGraph(repo.map, facts, {}, fetchEdges(sites, facts));
+  return { journeys: computeJourneys(graph, facts, sites, inferDispatch(sources, facts)), graph };
 }
 
 type Cache = { id: string; hash: string; steps: string[]; name: string };

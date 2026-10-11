@@ -19,6 +19,9 @@ export const EXTERNAL_LAYER = 'external';
 const KIND_RANK: Partial<Record<NodeKind, number>> = { group: 0, file: 1, table: 2, vendor: 3, symbol: 4, route: 5, entry: 6 };
 
 const emptyFacts = (path: string): FileFacts => ({ path, hash: '', imports: [], writes: [], symbols: [], calls: [], routes: [], entries: [] });
+/** A UI fetch site linked to the route it calls (journeys `fetchEdges`): a `fetches` edge from the calling symbol to `route:`. */
+export type FetchEdge = { from: string; route: string; file: string; confidence: 'syntactic' | 'inferred' };
+
 const isPseudo = (id: string) => id.startsWith('vendor:') || id.startsWith('table:');
 const normalize = (p: string) => p.replace(/\\/g, '/').split('/').filter((s) => s && s !== '.').join('/');
 
@@ -30,13 +33,17 @@ const normalize = (p: string) => p.replace(/\\/g, '/').split('/').filter((s) => 
  * `node_modules/<pkg>/…`, importing domains first), else into the top-level `group:vendors`.
  * A cell with confirmed `components` groups matching files by component; any container with more than
  * GROUP_THRESHOLD remaining files groups them by directory (recursively).
- * Leaf edges: imports (file→file), uses (file→vendor), calls, implements, handles (route→handler), writes (→table).
+ * Leaf edges: imports (file→file), uses (file→vendor), calls, implements, handles (route→handler), writes (→table),
+ * reads, and fetches (UI symbol → `route:`; derived from source text, so only when the caller passes `fetches`, e.g.
+ * from journeys' `fetchEdges(findFetchSites(sources), facts)`; owned by the fetching file, confidence `syntactic`
+ * only for exact matches).
  * Tier 2 calls replace a file's syntactic calls when `semantic[path].hash === facts[path].hash`.
  */
 export function buildGraph(
   map: DomainMap,
   facts: Readonly<Record<string, FileFacts>>,
   semantic: Readonly<Record<string, SemanticFacts>> = {},
+  fetches: readonly FetchEdge[] = [],
 ): ContextGraph {
   const mapper = createMapper(map);
   const nodes: Record<string, GraphNode> = {};
@@ -225,6 +232,8 @@ export function buildGraph(
     else row.set(to, [e]);
     local.push(e);
   };
+  const fetchesBy = new Map<string, FetchEdge[]>();
+  for (const fe of fetches) (fetchesBy.get(fe.file) ?? fetchesBy.set(fe.file, []).get(fe.file)!).push(fe);
   for (const path of placement.keys()) {
     const f = facts[path];
     if (!f) continue;
@@ -235,6 +244,7 @@ export function buildGraph(
     for (const w of f.writes) edge('writes', w.symbol ? resolve(w.symbol) : path, ensureTable(tableId(w.table)).id, path, 1);
     for (const r of f.reads ?? []) edge('reads', r.symbol ? resolve(r.symbol) : path, ensureTable(tableId(r.table)).id, path, 1);
     for (const r of f.routes) if (r.handler) edge('handles', r.id, resolve(r.handler), path, 1);
+    for (const fe of fetchesBy.get(path) ?? []) edge('fetches', resolve(fe.from), nodes[fe.route] ? fe.route : null, path, 1, undefined, fe.confidence === 'syntactic' ? 'syntactic' : undefined);
     if (!local.length) continue;
     for (const e of local.sort((a, b) => (a.id < b.id ? -1 : 1))) edges.push(e);
     local.length = 0;

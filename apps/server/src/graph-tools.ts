@@ -1,6 +1,9 @@
 // Read-only graph queries for the agent (NAVIGATION_PLAN §3.4): `graph_neighbors`, `trace`, `symbols_in`. They answer
 // from the same ContextGraph the user sees (Tier 1 + current Tier 2), deterministically and without a model call.
-import { MAX_TRACE_PATHS, fileOf, trace, type ContextGraph, type DomainMap, type EdgeKind, type FileFacts, type GraphEdge } from '@harness/core';
+import {
+  MAX_TRACE_PATHS, domainEdges, fileOf, providerPaths, trace,
+  type ContextGraph, type DomainMap, type EdgeKind, type Facts, type FileFacts, type GraphEdge, type Mapper, type Violation,
+} from '@harness/core';
 
 export const MAX_LINES = 80;
 
@@ -200,5 +203,43 @@ export function symbolsText(g: ContextGraph, map: DomainMap, facts: ReadonlyMap<
   }
   for (const r of f.routes) lines.push(`  route ${r.method} ${r.path}${r.handler ? ` → ${r.handler}` : ''}`);
   for (const e of f.entries) lines.push(`  entry ${e.kind}: ${e.label}`);
+  return cap(lines);
+}
+
+/**
+ * Beat 1: the system at a glance, deterministic. Domains (purpose, files per layer, tables), cross-domain import edges
+ * with counts, current rule violations, and every path to a model provider classified as through the gateway, a rule
+ * violation, or uncosted (`providerPaths` in core). Paths are repo paths, so the user can click them.
+ */
+export function overviewText(g: ContextGraph, map: DomainMap, facts: Facts, mapper: Mapper, violations: readonly Violation[]): string {
+  const name = (id: string) => map.domains.find((d) => d.id === id)?.name ?? id;
+  const lines: string[] = [`${map.domains.length} domains × ${map.layers.length} layers (${map.layers.map((l) => l.id).join(', ')}); ${facts.files.length} files.`, '', 'Domains:'];
+  for (const d of map.domains) {
+    const byLayer = new Map<string, number>();
+    for (const f of facts.files) {
+      const p = mapper.place(f);
+      if (p.kind === 'cell' && p.domain === d.id) byLayer.set(p.layer, (byLayer.get(p.layer) ?? 0) + 1);
+    }
+    const n = [...byLayer.values()].reduce((a, b) => a + b, 0);
+    const layers = map.layers.filter((l) => byLayer.has(l.id)).map((l) => `${l.id} ${byLayer.get(l.id)}`).join(', ');
+    const tables = Object.values(d.cells).flatMap((c) => c.tables ?? []);
+    lines.push(`- ${d.name} (domain:${d.id}): ${d.purpose}. ${n} files (${layers})${tables.length ? `; tables ${tables.join(', ')}` : ''}`);
+  }
+  const outside = new Map<string, number>();
+  for (const f of facts.files) {
+    const p = mapper.place(f);
+    if (p.kind !== 'cell' && p.kind !== 'test' && p.kind !== 'ignored') outside.set(p.kind, (outside.get(p.kind) ?? 0) + 1);
+  }
+  if (outside.size) lines.push(`  (outside domains: ${[...outside].map(([k, n]) => `${k} ${n}`).join(', ')})`);
+  const edges = domainEdges(facts, mapper);
+  lines.push('', `Cross-domain dependencies (${edges.length}, imports):`, ...edges.map((e) => `- ${name(e.from)} → ${name(e.to)}: ${e.files.length}`));
+  lines.push('', `Rule violations now (${violations.length}):`, ...violations.map((v) => `- ${v.invariant}: ${v.detail} (${map.invariants.find((i) => i.id === v.invariant)?.rule ?? ''})`));
+  const paths = providerPaths(g, map, violations);
+  if (paths.length) {
+    const label = { gateway: 'through the gateway (redacted, cost-logged)', violation: 'RULE VIOLATION', uncosted: 'outside the gateway, no rule broken (not redacted or cost-logged)' } as const;
+    lines.push('', `Paths to a model provider (${paths.length}):`);
+    for (const p of paths) lines.push(`- ${label[p.class]}${p.invariant ? ` ${p.invariant}` : ''}: ${p.nodes.join(' → ')}`);
+  }
+  lines.push('', 'Next: trace <symbol|route> for call chains, graph_neighbors <path> for what touches a file, domain <id> for its cells and rules.');
   return cap(lines);
 }

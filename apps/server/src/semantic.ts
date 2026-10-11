@@ -7,6 +7,7 @@ import {
 } from '@harness/core';
 import type { Bus } from './bus';
 import type { Repo } from './repo';
+import { repoFetchEdges } from './journeys';
 
 /**
  * Current Tier 2 facts per file (only those whose hash matches the file's current Tier 1 facts), kept in step with
@@ -60,11 +61,15 @@ export class SemanticStore {
     return out;
   }
 
-  /** The same graph the shell projects (`buildGraph(map, facts, semantic)`), rebuilt only after a change. */
+  /**
+   * The graph the shell projects (`buildGraph(map, facts, semantic)`) plus the UI → route `fetches` edges read from
+   * source text (the shell's graph has no sources), rebuilt only after a change.
+   */
   graph(): ContextGraph {
     const c = this.graphCache;
     if (c && c.version === this.version && c.map === this.repo.map) return c.graph;
-    const graph = buildGraph(this.repo.map, Object.fromEntries(this.repo.fileFacts), this.facts);
+    const facts = Object.fromEntries(this.repo.fileFacts);
+    const graph = buildGraph(this.repo.map, facts, this.facts, repoFetchEdges(this.repo, facts));
     this.graphCache = { version: this.version, map: this.repo.map, graph };
     return graph;
   }
