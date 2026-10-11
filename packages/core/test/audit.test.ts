@@ -15,56 +15,65 @@ import { scoutFacts } from './scout-facts';
 
 const map = loadMap();
 
+// The demo's DR-4 (DEMO_PLAN beat 3): option A on DR-3 (no_edge tools → outreach).
 const DR4: AuditDecision = {
-  id: 'DR-4', title: 'Filings go through the gateway', outcome: 'Route filings through complete() with a filings redaction mode', invariant: 'DR-1',
-  paths: ['src/tools/filing-summarize.ts'],
-  rationale: 'The user chose A, in their words: "A — go through the gateway, and give redaction a filings mode so the figures survive."',
+  id: 'DR-4', title: 'Research tools never read outreach data; the run loop passes outreach context in',
+  outcome: 'Keep research tools out of outreach data; the run loop passes outreach context in', invariant: 'DR-3',
+  paths: ['src/tools/outreach-history.ts'],
+  rationale: 'The user chose A, in their words: "A. Research tools never read outreach data; the run loop passes it in."\n\nWhat triggered it: src/tools/outreach-history.ts imports src/outreach/outreach-log.ts, but Research tools never depend on Outreach (DR-3).',
 };
-const DR5: AuditDecision = { id: 'DR-5', title: 'Research tools stay out of outreach', outcome: 'Keep tools independent', invariant: 'DR-3', paths: ['src/tools/company-profile.ts'], rationale: 'So research runs without CRM credentials.' };
+const DR5: AuditDecision = { id: 'DR-5', title: 'Model calls go through complete()', outcome: 'Use the gateway', invariant: 'DR-1', paths: ['src/tools/news-summarize.ts'], rationale: 'One place redacts personal data and records cost.' };
 const DR6: AuditDecision = { id: 'DR-6', title: 'Every model call is costed', outcome: 'Always call logCost', invariant: '', paths: ['src/gateway/cost-ledger.ts'], rationale: 'Usage must reconcile with the invoice: nothing skips logCost.' };
 const DR7: AuditDecision = { id: 'DR-7', title: 'Notes are written by memory only', outcome: 'Use notes-store', invariant: 'DR-2', paths: ['src/memory/notes-store.ts'], rationale: 'One writer for notes.' };
 const ALL = [DR7, DR6, DR5, DR4];
 
+const none = { calls: [], imports: [], writes: [], reads: [] };
 const surface = (over: Partial<TurnSurface>): TurnSurface => ({
-  turn: 't1', prompt: 'p', baseline: null, source: 'turn', files: [], created: [], symbols: [], delta: { calls: [], imports: [], writes: [] }, plan: [], violations: [], ...over,
+  turn: 't1', prompt: 'p', baseline: null, source: 'turn', files: [], created: [], symbols: [], delta: none, plan: [], violations: [], ...over,
+});
+
+/** Beat 6: a new research tool reads `outreach_log` through neutral shared db code (no import edge, reads unchecked). */
+const READER = 'src/tools/contact-history.ts';
+const beat6 = (reads: boolean) => surface({
+  files: [READER], created: [READER], symbols: [`${READER}#contactHistory`, `${READER}#contactHistory.run`],
+  delta: { ...none, imports: [{ from: READER, to: 'src/shared/db.ts' }], calls: [{ from: `${READER}#contactHistory.run`, to: 'src/shared/db.ts#db.where' }], reads: reads ? [{ file: READER, table: 'outreach_log' }] : [] },
 });
 
 describe('relevantDecisions (pre-filter)', () => {
-  it('a new filings tool calling complete(): the DR-1 decision (via the gateway) and the tools-side DR-3 decision, with reasons', () => {
-    const s = surface({
-      files: ['src/tools/filings-digest.ts'], created: ['src/tools/filings-digest.ts'], symbols: ['src/tools/filings-digest.ts#filingsDigest', 'src/tools/filings-digest.ts#filingsDigest.run'],
-      delta: { calls: [{ from: 'src/tools/filings-digest.ts#filingsDigest.run', to: 'src/gateway/complete.ts#complete' }], imports: [{ from: 'src/tools/filings-digest.ts', to: 'src/gateway/complete.ts' }], writes: [] },
-    });
-    const r = relevantDecisions(ALL, map, s);
-    expect(r.map((x) => x.decision.id)).toEqual(['DR-4', 'DR-5']);
-    expect(r[0]!.reasons.map((x) => x.kind)).toEqual(['invariant', 'mention']);
-    expect(r[0]!.reasons[0]!.detail).toContain('gateway');
-    expect(r[0]!.reasons[1]!.detail).toContain('"filings"');
+  it('a research tool reading outreach_log through shared code: DR-4 (on DR-3), with the read as the reason', () => {
+    const r = relevantDecisions(ALL, map, beat6(true));
+    expect(r.map((x) => x.decision.id)).toEqual(['DR-4']); // DR-7 (owns_writes) only cares about writes
+    expect(r[0]!.reasons).toEqual([{ kind: 'invariant', detail: 'src/tools/contact-history.ts newly reads "outreach_log" (owned by outreach)' }]);
+    // Before the facts carry reads, touching the tools domain is enough.
+    expect(relevantDecisions(ALL, map, beat6(false))[0]!.reasons[0]!.detail).toBe('the turn changed files in tools, an end of DR-3 (tools → outreach)');
+    // A read of an outreach table from any domain bears on DR-3.
+    expect(relevantDecisions([DR4], map, surface({ files: ['src/memory/retrieve.ts'], delta: { ...none, reads: [{ file: 'src/memory/retrieve.ts', table: 'contacts' }] } })).map((x) => x.decision.id)).toEqual(['DR-4']);
   });
 
-  it('anchors, exceptions, invariant targets, table owners and named symbols each make a decision relevant', () => {
-    expect(relevantDecisions(ALL, map, surface({ files: ['src/tools/filing-summarize.ts'] })).map((x) => [x.decision.id, x.reasons.map((y) => y.kind).join('+')]))
-      .toEqual([['DR-4', 'anchor']]);
+  it('anchors, exceptions, invariant targets, table writes and named symbols each make a decision relevant', () => {
+    expect(relevantDecisions(ALL, map, surface({ files: ['src/tools/outreach-history.ts'] })).map((x) => [x.decision.id, x.reasons.map((y) => y.kind).join('+')]))
+      .toEqual([['DR-4', 'anchor+invariant+mention']]); // mention: the rationale names the path
     expect(relevantDecisions(ALL, map, surface({ files: ['src/memory/notes-store.ts'], symbols: ['src/memory/notes-store.ts#save'] })).map((x) => x.decision.id)).toEqual(['DR-7']);
-    expect(relevantDecisions(ALL, map, surface({ files: ['vendor/llm-openai/index.ts'] })).map((x) => x.decision.id)).toEqual(['DR-4']);
-    const calls = surface({ files: ['src/outreach/send.ts'], delta: { calls: [{ from: 'src/outreach/send.ts#send', to: 'src/gateway/cost-ledger.ts#logCost' }], imports: [], writes: [] } });
-    expect(relevantDecisions(ALL, map, calls).map((x) => x.decision.id)).toEqual(['DR-4', 'DR-5', 'DR-6']); // DR-1 gateway reach, DR-3 `to` side changed, DR-6 anchor + names logCost
-    const excepted = parseDomainMap(mapYaml.replace('targets: ["vendor/llm-*/**", "vendor/embeddings/**"]\n    allowed_from: [gateway]\n    exceptions: []', 'targets: ["vendor/llm-*/**", "vendor/embeddings/**"]\n    allowed_from: [gateway]\n    exceptions: [{ path: src/tools/news-summarize.ts, decision: DR-4 }]'));
-    expect(relevantDecisions([DR4], excepted, surface({ files: ['src/tools/news-summarize.ts'] }))[0]!.reasons[0]!.detail).toContain('exception');
+    expect(relevantDecisions(ALL, map, surface({ files: ['src/channels/routes.ts'], delta: { ...none, writes: [{ file: 'src/channels/routes.ts', table: 'notes' }] } })).map((x) => x.decision.id)).toEqual(['DR-7']);
+    expect(relevantDecisions(ALL, map, surface({ files: ['vendor/llm-anthropic/index.ts'] })).map((x) => x.decision.id)).toEqual(['DR-5']);
+    const calls = surface({ files: ['src/outreach/send.ts'], delta: { ...none, calls: [{ from: 'src/outreach/send.ts#send', to: 'src/gateway/cost-ledger.ts#logCost' }] } });
+    expect(relevantDecisions(ALL, map, calls).map((x) => x.decision.id)).toEqual(['DR-4', 'DR-5', 'DR-6']); // DR-3 end changed, DR-1 gateway reach, DR-6 anchor + names logCost
+    const excepted = parseDomainMap(mapYaml.replace('targets: ["vendor/llm-*/**", "vendor/embeddings/**"]\n    allowed_from: [gateway]\n    exceptions: []', 'targets: ["vendor/llm-*/**", "vendor/embeddings/**"]\n    allowed_from: [gateway]\n    exceptions: [{ path: src/tools/news-summarize.ts, decision: DR-5 }]'));
+    expect(relevantDecisions([DR5], excepted, surface({ files: ['src/tools/news-summarize.ts'] }))[0]!.reasons.map((x) => x.detail)).toContain('src/tools/news-summarize.ts is an exception to DR-1');
   });
 
   it('nothing relevant → empty (the model call is skipped)', () => {
     expect(relevantDecisions(ALL, map, surface({ files: ['src/channels/validate.ts'], symbols: ['src/channels/validate.ts#validate'] }))).toEqual([]);
-    expect(relevantDecisions([], map, surface({ files: ['src/tools/filing-summarize.ts'] }))).toEqual([]);
+    expect(relevantDecisions([], map, beat6(true))).toEqual([]);
   });
 });
 
 describe('finding signatures and dismissal memory', () => {
-  const f: RawFinding = { decision: 'DR-4', files: ['src/tools/filings-digest.ts'], lines: [{ path: 'src/tools/filings-digest.ts', line: 7 }], text: 'DR-4 says filings use redaction: "filings"; line 7 calls complete() without it.', confidence: 'high' };
+  const f: RawFinding = { decision: 'DR-4', files: [READER], lines: [{ path: READER, line: 7 }], text: 'DR-4 says outreach history reaches the brief through the run loop; line 7 reads outreach_log directly.', confidence: 'high' };
 
   it('ignores line numbers, case, punctuation and file order', () => {
-    expect(normalizeFindingText('Line 7 calls COMPLETE() — src/a.ts:12 without it!')).toBe('calls complete src a ts without it');
-    expect(findingSignature(f)).toBe(findingSignature({ ...f, text: 'DR-4 says filings use redaction "filings". Line 31 calls complete() without it' }));
+    expect(normalizeFindingText('Line 7 reads OUTREACH_LOG — src/a.ts:12 directly!')).toBe('reads outreach log src a ts directly');
+    expect(findingSignature(f)).toBe(findingSignature({ ...f, text: 'DR-4 says outreach history reaches the brief through the run loop. Line 31 reads outreach_log directly' }));
     expect(findingSignature(f)).not.toBe(findingSignature({ ...f, decision: 'DR-5' }));
     expect(findingSignature({ ...f, files: ['b', 'a'] })).toBe(findingSignature({ ...f, files: ['a', 'b', 'a'] }));
   });
@@ -72,8 +81,8 @@ describe('finding signatures and dismissal memory', () => {
   it('a dismissed finding stays dismissed, including close rephrasings for the same decision and files', () => {
     const d: DismissedFinding[] = [{ signature: findingSignature(f), decision: f.decision, files: f.files, text: f.text }];
     expect(isDismissed(f, d)).toBe(true);
-    expect(isDismissed({ ...f, text: 'DR-4 says filings use redaction "filings"; this new line calls complete() without it.' }, d)).toBe(true);
-    expect(isDismissed({ ...f, text: 'The digest caches figures in memory, against DR-4.' }, d)).toBe(false);
+    expect(isDismissed({ ...f, text: 'DR-4 says outreach history reaches the brief through the run loop; this new line reads outreach_log directly.' }, d)).toBe(true);
+    expect(isDismissed({ ...f, text: 'The tool caches contact emails in memory, against DR-4.' }, d)).toBe(false);
     expect(isDismissed({ ...f, files: ['src/tools/other.ts'] }, d)).toBe(false);
   });
 
@@ -85,12 +94,12 @@ describe('finding signatures and dismissal memory', () => {
       { ...f, files: ['src/untouched.ts'], lines: [{ path: 'src/untouched.ts', line: 1 }] }, // not a changed file
       { ...f, text: '  ' },
       { ...f, text: f.text.replace('7', '8') }, // duplicate of the first (line numbers don't count)
-      { decision: 'DR-4', files: [], lines: [{ path: './src/tools/filings-digest.ts', line: 3.7 }, { path: 'src/other.ts', line: 2 }, { path: 'src/tools/filings-digest.ts', line: -1 }], text: 'Second finding on the cache.', confidence: 'certain' as never },
+      { decision: 'DR-4', files: [], lines: [{ path: `./${READER}`, line: 3.7 }, { path: 'src/other.ts', line: 2 }, { path: READER, line: -1 }], text: 'Second finding on the cache.', confidence: 'certain' as never },
     ];
-    const out = acceptFindings(raw, { decisions: ['DR-4'], files: ['src/tools/filings-digest.ts'], dismissed: [], open: [] });
+    const out = acceptFindings(raw, { decisions: ['DR-4'], files: [READER], dismissed: [], open: [] });
     expect(out).toEqual([
       f,
-      { decision: 'DR-4', files: ['src/tools/filings-digest.ts'], lines: [{ path: 'src/tools/filings-digest.ts', line: 3 }], text: 'Second finding on the cache.', confidence: 'low' },
+      { decision: 'DR-4', files: [READER], lines: [{ path: READER, line: 3 }], text: 'Second finding on the cache.', confidence: 'low' },
     ]);
     expect(acceptFindings([f], { decisions: ['DR-4'], files: f.files, dismissed: [], open: [f] })).toEqual([]); // already open
     expect(acceptFindings([f], { decisions: ['DR-4'], files: f.files, dismissed: [{ signature: findingSignature(f), decision: 'DR-4', files: f.files, text: f.text }], open: [] })).toEqual([]);
@@ -128,43 +137,44 @@ describe('turnSurface / planSurface', () => {
     calls: [...before.calls, { from: 'src/tools/company-profile.ts#companyProfile.run', to: 'src/outreach/send.ts#send', confidence: 'syntactic', count: 1 }],
     writes: [{ table: 'contacts', symbol: null, via: 'db' }],
   };
-  const created: FileFacts = { path: 'src/tools/filings-digest.ts', hash: 'h3', imports: [{ to: 'src/gateway/complete.ts', typeOnly: false }], writes: [], symbols: [], calls: [{ from: 'src/tools/filings-digest.ts#run', to: 'src/gateway/complete.ts#complete', confidence: 'syntactic', count: 1 }], routes: [], entries: [] };
+  const created: FileFacts = { path: 'src/tools/contact-history.ts', hash: 'h3', imports: [{ to: 'src/shared/db.ts', typeOnly: false }], writes: [], reads: [{ table: 'outreach_log', symbol: 'src/tools/contact-history.ts#run', via: 'db' }], symbols: [], calls: [{ from: 'src/tools/contact-history.ts#run', to: 'src/shared/db.ts#db.all', confidence: 'syntactic', count: 1 }], routes: [], entries: [] };
   const events: HarnessEvent[] = [
     ev('map_confirmed', { map, source: 'fixture' }),
     ev('repo_scanned', { files: [], imports: [], writes: [], edges: [], fileFacts: Object.values(facts) }),
-    ev('turn_started', { prompt: 'add a filings digest', head: 'HEAD0', baseline: 'SNAP0' }, { turn: 't1' }),
-    ev('planned', { steps: [{ n: 1, text: 'digest', files: ['src/tools/filings-digest.ts#run'], imports: [{ from: 'src/tools/filings-digest.ts', to: 'src/gateway/complete.ts' }] }], cells: [], edges: [], unassigned: [] }, { turn: 't1' }),
+    ev('turn_started', { prompt: 'add a contact history tool', head: 'HEAD0', baseline: 'SNAP0' }, { turn: 't1' }),
+    ev('planned', { steps: [{ n: 1, text: 'history tool', files: ['src/tools/contact-history.ts#run'], imports: [{ from: 'src/tools/contact-history.ts', to: 'src/shared/db.ts' }] }], cells: [], edges: [], unassigned: [] }, { turn: 't1' }),
     ev('edited', { added: 3, removed: 0, created: false, symbols: { ...emptySymbolDiff(), body: ['src/tools/company-profile.ts#companyProfile.run'] } }, { turn: 't1', path: 'src/tools/company-profile.ts' }),
     ev('facts_changed', { facts: after }, { turn: 't1', path: 'src/tools/company-profile.ts' }),
-    ev('edited', { added: 9, removed: 0, created: true, symbols: { ...emptySymbolDiff(), added: ['src/tools/filings-digest.ts#run'], renamed: [['a#x', 'src/tools/filings-digest.ts#y']] } }, { turn: 't1', path: 'src/tools/filings-digest.ts' }),
-    ev('facts_changed', { facts: created }, { turn: 't1', path: 'src/tools/filings-digest.ts' }),
+    ev('edited', { added: 9, removed: 0, created: true, symbols: { ...emptySymbolDiff(), added: ['src/tools/contact-history.ts#run'], renamed: [['a#x', 'src/tools/contact-history.ts#y']] } }, { turn: 't1', path: 'src/tools/contact-history.ts' }),
+    ev('facts_changed', { facts: created }, { turn: 't1', path: 'src/tools/contact-history.ts' }),
   ];
 
   it('is null until the turn ends; then files, symbols, baseline and the fact delta come from the log', () => {
     expect(turnSurface(events, 't1')).toBeNull();
-    const done = [...events, ev('turn_ended', { added: 12, removed: 0, files: ['src/tools/company-profile.ts', 'src/tools/filings-digest.ts', 'domains.yaml', 'scripts/x.ts'], reason: 'success' }, { turn: 't1' })];
+    const done = [...events, ev('turn_ended', { added: 12, removed: 0, files: ['src/tools/company-profile.ts', 'src/tools/contact-history.ts', 'domains.yaml', 'scripts/x.ts'], reason: 'success' }, { turn: 't1' })];
     const s = turnSurface(done, 't1')!;
-    expect(s).toMatchObject({ turn: 't1', prompt: 'add a filings digest', baseline: 'SNAP0', source: 'turn' });
-    expect(s.files).toEqual(['scripts/x.ts', 'src/tools/company-profile.ts', 'src/tools/filings-digest.ts']);
-    expect(s.created).toEqual(['src/tools/filings-digest.ts']);
-    expect(s.symbols).toEqual(['src/tools/company-profile.ts#companyProfile.run', 'src/tools/filings-digest.ts#run', 'src/tools/filings-digest.ts#y']);
+    expect(s).toMatchObject({ turn: 't1', prompt: 'add a contact history tool', baseline: 'SNAP0', source: 'turn' });
+    expect(s.files).toEqual(['scripts/x.ts', 'src/tools/company-profile.ts', 'src/tools/contact-history.ts']);
+    expect(s.created).toEqual(['src/tools/contact-history.ts']);
+    expect(s.symbols).toEqual(['src/tools/company-profile.ts#companyProfile.run', 'src/tools/contact-history.ts#run', 'src/tools/contact-history.ts#y']);
     expect(s.delta).toEqual({
       calls: [
         { from: 'src/tools/company-profile.ts#companyProfile.run', to: 'src/outreach/send.ts#send' },
-        { from: 'src/tools/filings-digest.ts#run', to: 'src/gateway/complete.ts#complete' },
+        { from: 'src/tools/contact-history.ts#run', to: 'src/shared/db.ts#db.all' },
       ],
-      imports: [{ from: 'src/tools/company-profile.ts', to: 'src/outreach/send.ts' }, { from: 'src/tools/filings-digest.ts', to: 'src/gateway/complete.ts' }],
+      imports: [{ from: 'src/tools/company-profile.ts', to: 'src/outreach/send.ts' }, { from: 'src/tools/contact-history.ts', to: 'src/shared/db.ts' }],
       writes: [{ file: 'src/tools/company-profile.ts', table: 'contacts' }],
+      reads: [{ file: 'src/tools/contact-history.ts', table: 'outreach_log' }],
     });
     expect(s.plan).toHaveLength(1);
     expect(turnSurface(done, 'nope')).toBeNull();
-    expect(factDelta({}, {}, ['x'])).toEqual({ calls: [], imports: [], writes: [] });
+    expect(factDelta({}, {}, ['x'])).toEqual({ calls: [], imports: [], writes: [], reads: [] });
   });
 
   it('planSurface reads the latest plan of an open turn', () => {
     const p = planSurface(events, 't1')!;
-    expect(p).toMatchObject({ source: 'plan', baseline: null, files: ['src/tools/filings-digest.ts'], symbols: ['src/tools/filings-digest.ts#run'] });
-    expect(p.delta.imports).toEqual([{ from: 'src/tools/filings-digest.ts', to: 'src/gateway/complete.ts' }]);
+    expect(p).toMatchObject({ source: 'plan', baseline: null, files: ['src/tools/contact-history.ts'], symbols: ['src/tools/contact-history.ts#run'] });
+    expect(p.delta.imports).toEqual([{ from: 'src/tools/contact-history.ts', to: 'src/shared/db.ts' }]);
     expect(planSurface(events.slice(0, 3), 't1')).toBeNull();
   });
 });
@@ -185,18 +195,18 @@ describe('rule proposals (reinforcement, promote)', () => {
   });
 
   it('setRuleText changes only that rule line; changeRuleProposal carries a valid candidate and a change_rule', () => {
-    const rule = amendedRuleText('Model providers are only called through the model gateway', { id: 'DR-4', title: 'Filings go through the gateway with redaction: "filings".' });
-    expect(rule).toBe('Model providers are only called through the model gateway; DR-4: Filings go through the gateway with redaction: "filings"');
-    expect(amendedRuleText(rule, { id: 'DR-4', title: 'Filings go through the gateway with redaction: "filings"' })).toBe(rule);
-    const yaml = setRuleText(mapYaml, 'DR-1', rule);
+    const rule = amendedRuleText('Research tools never depend on outreach', { id: 'DR-4', title: 'Research tools never read outreach data; the run loop passes outreach context in.' });
+    expect(rule).toBe('Research tools never depend on outreach; DR-4: Research tools never read outreach data; the run loop passes outreach context in');
+    expect(amendedRuleText(rule, { id: 'DR-4', title: 'Research tools never read outreach data; the run loop passes outreach context in' })).toBe(rule);
+    const yaml = setRuleText(mapYaml, 'DR-3', rule);
     const changed = yaml.split('\n').filter((l, i) => l !== mapYaml.split('\n')[i]);
     expect(changed).toEqual([`    rule: ${JSON.stringify(rule)}`]);
-    expect(parseDomainMap(yaml).invariants[0]!.rule).toBe(rule);
+    expect(parseDomainMap(yaml).invariants[2]!.rule).toBe(rule);
     expect(() => setRuleText(mapYaml, 'DR-99', 'x')).toThrow(/DR-99/);
 
     const facts = scoutFacts();
-    const p = changeRuleProposal({ id: 'MP-3', yaml: mapYaml, map, facts, history: [], trigger: [], scope: ['src/tools/x.ts', 'rule:DR-1', 'rule:DR-1'], rationale: 'r', invariant: 'DR-1', rule });
-    expect(p).toMatchObject({ id: 'MP-3', chosen: 0, scope: ['rule:DR-1', 'src/tools/x.ts'], changes: [{ kind: 'change_rule', invariant: 'DR-1', rule }] });
+    const p = changeRuleProposal({ id: 'MP-3', yaml: mapYaml, map, facts, history: [], trigger: [], scope: ['src/tools/x.ts', 'rule:DR-3', 'rule:DR-3'], rationale: 'r', invariant: 'DR-3', rule });
+    expect(p).toMatchObject({ id: 'MP-3', chosen: 0, scope: ['rule:DR-3', 'src/tools/x.ts'], changes: [{ kind: 'change_rule', invariant: 'DR-3', rule }] });
     expect(p.candidates).toHaveLength(1);
     expect(p.candidates[0]!.yaml).toBe(yaml);
     expect(p.candidates[0]!.score.total).toBe(p.current.total); // rule text doesn't move the map's score

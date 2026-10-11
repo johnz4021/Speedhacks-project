@@ -10,6 +10,7 @@ export type FactDeltaPlus = {
   calls: { from: string; to: string }[];
   imports: { from: string; to: string }[];
   writes: { file: string; table: string }[];
+  reads: { file: string; table: string }[]; // from FileFacts.reads (empty until the facts carry reads)
 };
 
 export type TurnSurface = {
@@ -23,7 +24,7 @@ export type TurnSurface = {
   created: string[];
   /** Symbol ids the turn added or changed (renames count as their new id), sorted. */
   symbols: string[];
-  /** New calls, imports and table writes in the changed files (facts at turn start → turn end). */
+  /** New calls, imports, table writes and reads in the changed files (facts at turn start → turn end). */
   delta: FactDeltaPlus;
   plan: PlanStep[];
   /** Violations the checker already raised this turn (plan and gate) or holds for these files. Never re-raised by the auditor. */
@@ -34,9 +35,9 @@ const HARNESS_OWN = (p: string) => p === 'domains.yaml' || p.startsWith('decisio
 const uniqSorted = (xs: Iterable<string>) => [...new Set(xs)].sort();
 const pairKey = (a: string, b: string) => `${a}\u0000${b}`;
 
-/** New imports, calls and writes of `after` relative to `before`, for `files`. */
+/** New imports, calls, writes and reads of `after` relative to `before`, for `files`. */
 export function factDelta(before: Readonly<Record<string, FileFacts>>, after: Readonly<Record<string, FileFacts>>, files: readonly string[]): FactDeltaPlus {
-  const out: FactDeltaPlus = { calls: [], imports: [], writes: [] };
+  const out: FactDeltaPlus = { calls: [], imports: [], writes: [], reads: [] };
   for (const path of files) {
     const a = after[path];
     if (!a) continue;
@@ -47,9 +48,11 @@ export function factDelta(before: Readonly<Record<string, FileFacts>>, after: Re
     for (const c of a.calls) if (!oldCalls.has(pairKey(c.from, c.to))) out.calls.push({ from: c.from, to: c.to });
     const oldWrites = new Set(b?.writes.map((w) => w.table) ?? []);
     for (const w of a.writes) if (!oldWrites.has(w.table)) out.writes.push({ file: path, table: w.table });
+    const oldReads = new Set(b?.reads?.map((r) => r.table) ?? []);
+    for (const r of a.reads ?? []) if (!oldReads.has(r.table)) out.reads.push({ file: path, table: r.table });
   }
   const sort = <T extends object>(xs: T[]) => [...new Map(xs.map((x) => [JSON.stringify(x), x])).values()].sort((x, y) => (JSON.stringify(x) < JSON.stringify(y) ? -1 : 1));
-  return { calls: sort(out.calls), imports: sort(out.imports), writes: sort(out.writes) };
+  return { calls: sort(out.calls), imports: sort(out.imports), writes: sort(out.writes), reads: sort(out.reads) };
 }
 
 /**
@@ -105,7 +108,7 @@ export function planSurface(events: readonly HarnessEvent[], turnId: string): Tu
     files,
     created: files.filter((f) => !ui.files[f]),
     symbols,
-    delta: { calls: [], imports: [...new Map(imports.map((i) => [pairKey(i.from, i.to), i])).values()], writes: [] },
+    delta: { calls: [], imports: [...new Map(imports.map((i) => [pairKey(i.from, i.to), i])).values()], writes: [], reads: [] },
     plan: turn.steps,
     violations: dedupeViolations([...turn.planViolations, ...ui.violations.filter((v) => files.includes(v.file))]),
   };

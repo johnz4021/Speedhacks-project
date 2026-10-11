@@ -20,34 +20,36 @@ const dirs: string[] = [];
 afterAll(() => { for (const d of dirs) rmSync(d, { recursive: true, force: true }); });
 const git = (root: string, ...args: string[]) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
 
+/** The demo's DR-4 (DEMO_PLAN beat 3): option A on DR-3 (no_edge tools → outreach), as `recordFork` writes it. */
 const DR4 = [
   '---',
   'id: DR-4',
-  'title: Filings go through the gateway',
-  'outcome: Route filings through the gateway, with a filings redaction mode',
+  'title: Research tools never read outreach data; the run loop passes outreach context in',
+  'outcome: Keep research tools out of outreach data; the run loop passes outreach context in',
   'status: made',
   'type: standing',
-  'invariant: DR-1',
+  'invariant: DR-3',
   'anchors:',
   '  paths:',
-  '    - src/tools/filing-summarize.ts',
-  'rejected: Add an exception for src/tools/filing-summarize.ts',
+  '    - src/tools/outreach-history.ts',
+  'rejected: Add an exception for src/tools/outreach-history.ts',
   '---',
   '',
-  'The user chose A, in their words: "A — go through the gateway, and give redaction a filings mode so the figures survive."',
+  'The user chose A, in their words: "A. Research tools never read outreach data; the run loop passes it in."',
   '',
-  'What triggered it: src/tools/filing-summarize.ts imports vendor/llm-openai/index.ts, which only the model gateway may call (DR-1).',
+  'Asked during: "Can we add a research tool that checks whether we\'ve already emailed this contact?"',
+  '',
+  'What triggered it: src/tools/outreach-history.ts imports src/outreach/outreach-log.ts, but Research tools never depend on Outreach (DR-3).',
   '',
 ].join('\n');
 
-/** A filings tool that calls complete() without `redaction: "filings"` (line 6). */
-const DIGEST = [
+/** Beat 6: a research tool that reads `outreach_log` through neutral shared code (no import edge; reads aren't gated). Line 5 reads it. */
+const HISTORY = [
   'import type { Tool } from "../shared/types";',
-  'import { call as filings } from "../../vendor/sec-edgar/index";',
-  'import { complete } from "../gateway/complete";',
-  'export const filingsDigest: Tool = {',
-  '  name: "filings-digest", tags: ["filings"],',
-  '  run: async (c) => complete({ purpose: "filings", messages: [filings(c)] }),',
+  'import { db } from "../shared/db";',
+  'export const contactHistory: Tool = {',
+  '  name: "contact-history", tags: ["outreach", "history"],',
+  '  run: async (c) => JSON.stringify(db.all("outreach_log").filter((row) => JSON.stringify(row).includes(c))),',
   '};',
   '',
 ].join('\n');
@@ -56,7 +58,7 @@ function sandbox(): string {
   const dir = realpathSync(mkdtempSync(join(process.env.HARNESS_TEST_TMP ?? tmpdir(), 'harness-audit-')));
   dirs.push(dir);
   cpSync(fixtureRepo, dir, { recursive: true });
-  writeFileSync(join(dir, 'domains.yaml'), mapYaml.replace('allowed_from: [gateway]\n    exceptions: []', 'allowed_from: [gateway]\n    exceptions: []\n    decisions: [DR-4]'));
+  writeFileSync(join(dir, 'domains.yaml'), mapYaml.replace('    to: outreach\n    exceptions: []', '    to: outreach\n    exceptions: []\n    decisions: [DR-4]'));
   mkdirSync(join(dir, 'decisions'));
   writeFileSync(join(dir, 'decisions/DR-4.md'), DR4);
   git(dir, 'init', '-q');
@@ -67,7 +69,7 @@ function sandbox(): string {
   return dir;
 }
 
-/** Fake auditor: flags any changed line that calls complete( without `redaction: "filings"`, citing DR-4 — if DR-4 was sent. */
+/** Fake auditor: flags any added line in a tools file that reads an outreach table, citing DR-4 — if DR-4 was sent. */
 function fakeAuditor(calls: AuditInput[]): Auditor {
   return async (input) => {
     calls.push(input);
@@ -78,8 +80,8 @@ function fakeAuditor(calls: AuditInput[]): Auditor {
       const header = /^### (\S+)/.exec(l);
       if (header) { path = header[1]!; continue; }
       const m = /^\s*(\d+) \+ (.*)$/.exec(l);
-      if (m && m[2]!.includes('complete(') && !m[2]!.includes('redaction')) {
-        findings.push({ decision: 'DR-4', files: [path], lines: [{ path, line: Number(m[1]) }], confidence: 'high' as const, text: `DR-4 says filings go through the gateway with redaction: "filings" so the figures survive; ${path}:${m[1]} calls complete() without it.` });
+      if (m && path.startsWith('src/tools/') && /"(outreach_log|contacts)"/.test(m[2]!)) {
+        findings.push({ decision: 'DR-4', files: [path], lines: [{ path, line: Number(m[1]) }], confidence: 'high' as const, text: `DR-4 says outreach history reaches the brief through the run loop; ${path}:${m[1]} reads outreach_log directly.` });
       }
     }
     return { findings, cost: 0.02 };
@@ -114,29 +116,34 @@ function setup() {
   return { root, bus, repo, auditor, journeys, calls, named, turn, put, of, idle };
 }
 
+const READER = 'src/tools/contact-history.ts';
+
 describe('auditor loop (fake auditor)', () => {
-  it('a filings tool calling complete() without redaction: "filings" while DR-4 stands → a finding citing DR-4 and the line; dismiss is remembered; the ledger is untouched', async () => {
+  it('a research tool reading outreach_log through shared code while DR-4 stands → a finding citing DR-4 and the line; the gate stays quiet; dismiss is remembered; the ledger is untouched', async () => {
     const { root, bus, auditor, calls, turn, put, of, idle } = setup();
     await idle();
 
-    turn('t1', put('src/tools/filings-digest.ts', DIGEST));
+    turn('t1', put(READER, HISTORY));
     await idle();
+    const ui = reduce(bus.events);
+    expect(ui.turns[0]!.violationsSeen).toEqual([]); // no import edge crossed: the checker has nothing to say
+    expect(ui.violations.filter((v) => v.file === READER)).toEqual([]);
     expect(calls).toHaveLength(1);
     const input = calls[0]!;
     expect(input.decisions.map((d) => d.decision.id)).toEqual(['DR-4']);
-    expect(input.decisions[0]!.reasons.map((r) => r.kind)).toEqual(['invariant', 'mention']);
-    expect(input.surface).toMatchObject({ turn: 't1', source: 'turn', files: ['src/tools/filings-digest.ts'], created: ['src/tools/filings-digest.ts'] });
-    expect(input.surface.delta.calls).toContainEqual({ from: expect.stringMatching(/^src\/tools\/filings-digest\.ts#/), to: 'src/gateway/complete.ts#complete' });
-    expect(input.diff).toContain('### src/tools/filings-digest.ts (new file)');
-    expect(input.diff).toContain('   6 +   run: async (c) => complete({ purpose: "filings", messages: [filings(c)] }),');
+    expect(input.decisions[0]!.reasons[0]).toEqual({ kind: 'invariant', detail: 'the turn changed files in tools, an end of DR-3 (tools → outreach)' });
+    expect(input.surface).toMatchObject({ turn: 't1', source: 'turn', files: [READER], created: [READER], violations: [] });
+    expect(input.surface.delta.imports).toContainEqual({ from: READER, to: 'src/shared/db.ts' });
+    expect(input.diff).toContain(`### ${READER} (new file)`);
+    expect(input.diff).toContain('   5 +   run: async (c) => JSON.stringify(db.all("outreach_log")');
     expect(input.invariants.map((i) => i.id)).toEqual(['DR-1', 'DR-2', 'DR-3']);
 
     const found = bus.events.filter((e) => e.kind === 'audit_finding');
     expect(found).toHaveLength(1);
-    expect(found[0]!).toMatchObject({ turn: 't1', path: 'src/tools/filings-digest.ts' });
+    expect(found[0]!).toMatchObject({ turn: 't1', path: READER });
     expect((found[0]!.data as EventData['audit_finding']).finding).toEqual({
-      id: 'AF-1', decision: 'DR-4', files: ['src/tools/filings-digest.ts'], lines: [{ path: 'src/tools/filings-digest.ts', line: 6 }], confidence: 'high',
-      text: 'DR-4 says filings go through the gateway with redaction: "filings" so the figures survive; src/tools/filings-digest.ts:6 calls complete() without it.',
+      id: 'AF-1', decision: 'DR-4', files: [READER], lines: [{ path: READER, line: 5 }], confidence: 'high',
+      text: `DR-4 says outreach history reaches the brief through the run loop; ${READER}:5 reads outreach_log directly.`,
     });
     expect(of('maintenance_run').filter((m) => m.agent === 'auditor')).toEqual([expect.objectContaining({ trigger: 'turn', cost: 0.02, ok: true })]);
     expect(reduce(bus.events).findings['AF-1']).toMatchObject({ status: 'open', turn: 't1' });
@@ -152,10 +159,10 @@ describe('auditor loop (fake auditor)', () => {
     expect(of('audit_resolved')).toEqual([{ id: 'AF-1', outcome: 'dismissed' }]);
     expect(reduce(bus.events).findings['AF-1']!.status).toBe('dismissed');
     const memory = JSON.parse(readFileSync(join(root, '.harness/audit/dismissed.json'), 'utf8')) as { dismissed: { decision: string; files: string[] }[] };
-    expect(memory.dismissed).toEqual([expect.objectContaining({ id: 'AF-1', decision: 'DR-4', files: ['src/tools/filings-digest.ts'] })]);
+    expect(memory.dismissed).toEqual([expect.objectContaining({ id: 'AF-1', decision: 'DR-4', files: [READER] })]);
 
-    // Next turn edits the same file: the auditor runs again, raises the same finding (now at line 7), and it stays dismissed.
-    turn('t2', () => { writeFileSync(join(root, 'src/tools/filings-digest.ts'), `// Filings digest\n${DIGEST}`); return ['src/tools/filings-digest.ts']; });
+    // Next turn edits the same file: the auditor runs again, raises the same finding (now at line 6), and it stays dismissed.
+    turn('t2', () => { writeFileSync(join(root, READER), `// Contact history\n${HISTORY}`); return [READER]; });
     await idle();
     expect(calls).toHaveLength(2);
     expect(bus.events.filter((e) => e.kind === 'audit_finding')).toHaveLength(1);
@@ -168,10 +175,10 @@ describe('auditor loop (fake auditor)', () => {
     expect(ledger(reduce(bus.events))).toEqual(ledger(reduce(bus.events.filter((e) => !['audit_finding', 'audit_resolved', 'maintenance_run'].includes(e.kind)))));
   });
 
-  it('promote turns a finding into a living-map proposal amending DR-1 (accept commits domains.yaml); reinforcement proposes once', async () => {
+  it('promote turns a finding into a living-map proposal amending DR-3 (accept commits domains.yaml); reinforcement proposes once', async () => {
     const { root, bus, repo, auditor, turn, put, of, idle } = setup();
     const lm = attachLivingMap({ bus, repo, proposer: null, labeler: null, gitLimit: 20 });
-    turn('t1', put('src/tools/filings-risk.ts', DIGEST.replace('filingsDigest', 'filingsRisk')));
+    turn('t1', put('src/tools/emailed-before.ts', HISTORY.replace('contactHistory', 'emailedBefore')));
     await idle();
     await lm.idle();
     expect(reduce(bus.events).findings['AF-1']).toMatchObject({ decision: 'DR-4', status: 'open' });
@@ -179,8 +186,8 @@ describe('auditor loop (fake auditor)', () => {
     expect(auditor.promote('AF-1')).toEqual({ ok: true, proposal: 'MP-1', manual: false });
     expect(auditor.promote('AF-1')).toMatchObject({ ok: false, status: 409 });
     const p = of('map_proposed').find((x) => x.proposal)!.proposal!;
-    const rule = 'Model providers are only called through the model gateway; DR-4: Filings go through the gateway';
-    expect(p).toMatchObject({ id: 'MP-1', trigger: [], scope: ['rule:DR-1', 'src/tools/filings-risk.ts'], changes: [{ kind: 'change_rule', invariant: 'DR-1', rule }] });
+    const rule = 'Research tools never depend on outreach; DR-4: Research tools never read outreach data; the run loop passes outreach context in';
+    expect(p).toMatchObject({ id: 'MP-1', trigger: [], scope: ['rule:DR-3', 'src/tools/emailed-before.ts'], changes: [{ kind: 'change_rule', invariant: 'DR-3', rule }] });
     expect(p.rationale).toMatch(/^Promoted from AF-1: /);
     expect(of('audit_resolved')).toEqual([{ id: 'AF-1', outcome: 'promoted' }]);
     expect(reduce(bus.events).proposals['MP-1']!.status).toBe('pending');
@@ -188,20 +195,20 @@ describe('auditor loop (fake auditor)', () => {
     // The living map's accept path works unchanged on an auditor proposal: only domains.yaml is committed.
     expect(lm.accept('MP-1')).toEqual({ ok: true });
     expect(git(root, 'show', '--name-only', '--format=', 'HEAD')).toBe('domains.yaml');
-    expect(parseDomainMap(readFileSync(join(root, 'domains.yaml'), 'utf8')).invariants[0]!.rule).toBe(rule);
-    expect(git(root, 'status', '--porcelain')).toContain('?? src/tools/filings-risk.ts');
+    expect(parseDomainMap(readFileSync(join(root, 'domains.yaml'), 'utf8')).invariants[2]!.rule).toBe(rule);
+    expect(git(root, 'status', '--porcelain')).toContain('?? src/tools/emailed-before.ts');
     await lm.idle();
 
-    // Rule reinforcement: three option-A decisions on DR-1 for Research tools → one proposal, not repeated.
-    const decide = () => { for (const id of ['DR-5', 'DR-6', 'DR-7']) bus.emit('decision_recorded', { id, title: `${id} comply`, invariant: 'DR-1', option: 'A', paths: [`src/tools/${id}.ts`], alike: false }); };
+    // Rule reinforcement: three option-A decisions on DR-3 for Research tools → one proposal, not repeated.
+    const decide = () => { for (const id of ['DR-5', 'DR-6', 'DR-7']) bus.emit('decision_recorded', { id, title: `${id} comply`, invariant: 'DR-3', option: 'A', paths: [`src/tools/${id}.ts`], alike: false }); };
     turn('t2', () => [], decide);
     await idle();
     const reinforced = of('map_proposed').filter((x) => x.proposal?.trigger.some((s) => s.signal === 'rule_reinforcement'));
     expect(reinforced).toHaveLength(1);
     expect(reinforced[0]!.proposal).toMatchObject({
       id: 'MP-2',
-      changes: [{ kind: 'change_rule', invariant: 'DR-1', rule: `${rule} (confirmed 3× for Research tools: DR-5, DR-6, DR-7)` }],
-      scope: ['domain:tools', 'rule:DR-1', 'src/tools/DR-5.ts', 'src/tools/DR-6.ts', 'src/tools/DR-7.ts'],
+      changes: [{ kind: 'change_rule', invariant: 'DR-3', rule: `${rule} (confirmed 3× for Research tools: DR-5, DR-6, DR-7)` }],
+      scope: ['domain:tools', 'rule:DR-3', 'src/tools/DR-5.ts', 'src/tools/DR-6.ts', 'src/tools/DR-7.ts'],
     });
     turn('t3', () => []);
     await idle();
@@ -214,15 +221,15 @@ describe('plan review (HARNESS_AUDIT_PLANS=1)', () => {
   it('reviews each submitted plan mid-turn without a diff; off by default', async () => {
     const { bus, repo, calls, idle } = setup(); // plans: false
     const planCalls: AuditInput[] = [];
-    const reviewer = attachAuditor({ bus, repo, auditor: async (input) => { planCalls.push(input); return { findings: [{ decision: 'DR-4', files: ['src/tools/filings-digest.ts'], lines: [], text: 'Step 1 sends filings through complete() without the filings redaction mode DR-4 asks for.', confidence: 'medium' }], cost: 0.01 }; }, plans: true });
+    const reviewer = attachAuditor({ bus, repo, auditor: async (input) => { planCalls.push(input); return { findings: [{ decision: 'DR-4', files: [READER], lines: [], text: 'Step 1 has a research tool read outreach_log itself; DR-4 says the run loop passes outreach context in.', confidence: 'medium' }], cost: 0.01 }; }, plans: true });
     bus.turn = 'tp';
-    bus.emit('turn_started', { prompt: 'add a filings digest', head: '', baseline: '' });
-    bus.emit('planned', { steps: [{ n: 1, text: 'Add src/tools/filings-digest.ts calling complete()', files: ['src/tools/filings-digest.ts'], imports: [{ from: 'src/tools/filings-digest.ts', to: 'src/gateway/complete.ts' }] }], cells: [], edges: [], unassigned: [] });
+    bus.emit('turn_started', { prompt: 'add a contact history tool', head: '', baseline: '' });
+    bus.emit('planned', { steps: [{ n: 1, text: `Add ${READER} reading outreach_log through src/shared/db`, files: [READER], imports: [{ from: READER, to: 'src/shared/db.ts' }] }], cells: [], edges: [], unassigned: [] });
     await reviewer.idle();
     await idle();
     expect(calls).toHaveLength(0); // the default loop doesn't review plans
     expect(planCalls).toHaveLength(1);
-    expect(planCalls[0]!.surface).toMatchObject({ source: 'plan', files: ['src/tools/filings-digest.ts'], baseline: null });
+    expect(planCalls[0]!.surface).toMatchObject({ source: 'plan', files: [READER], baseline: null });
     expect(planCalls[0]!.diff).toBe('');
     expect(planCalls[0]!.decisions.map((d) => d.decision.id)).toEqual(['DR-4']);
     const f = bus.events.find((e) => e.kind === 'audit_finding')!;

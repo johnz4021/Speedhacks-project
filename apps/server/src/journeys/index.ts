@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { Hono } from 'hono';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import {
-  buildGraph, computeJourneys, findFetchSites, journeyHash, reduce,
+  buildGraph, computeJourneys, findFetchSites, inferDispatch, journeyHash, reduce,
   type ContextGraph, type FileFacts, type Journey,
 } from '@harness/core';
 import type { Bus } from '../bus';
@@ -68,7 +68,7 @@ export function journeysFor(repo: Repo): { journeys: Journey[]; graph: ContextGr
     return source === null ? [] : [{ path: f.path, source, symbols: f.symbols }];
   });
   const graph = buildGraph(repo.map, facts);
-  return { journeys: computeJourneys(graph, facts, findFetchSites(sources)), graph };
+  return { journeys: computeJourneys(graph, facts, findFetchSites(sources), inferDispatch(sources, facts)), graph };
 }
 
 type Cache = { id: string; hash: string; steps: string[]; name: string };

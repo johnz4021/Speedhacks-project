@@ -48,6 +48,11 @@ function invariantTouches(inv: Invariant, s: TurnSurface, mapper: Mapper, target
   const domainOf = (p: string) => mapper.domainOf(p);
   const changedDomains = new Set(s.files.map(domainOf).filter((d): d is string => !!d));
   const targetDomains = new Set(targets.map(domainOf).filter((d): d is string => !!d));
+  // Tables the turn newly reads or writes (reads are invisible to the gate), with the domain whose cell lists them.
+  const tables = [...s.delta.reads.map((r) => ({ ...r, how: 'reads' })), ...s.delta.writes.map((w) => ({ ...w, how: 'writes' }))]
+    .map((t) => ({ ...t, owner: mapper.ownerOf(t.table)?.domain ?? null }));
+  const tableOf = (domains: readonly string[]) => tables.find((t) => t.owner && domains.includes(t.owner));
+  const say = (t: { file: string; how: string; table: string; owner: string | null }) => `${t.file} newly ${t.how} "${t.table}" (owned by ${t.owner})`;
   const exception = inv.exceptions.find((e) => s.files.includes(e.path));
   if (exception) return `${exception.path} is an exception to ${inv.id}`;
   if (inv.kind === 'only_via') {
@@ -57,26 +62,28 @@ function invariantTouches(inv: Invariant, s: TurnSurface, mapper: Mapper, target
     if (via) return `the turn now reaches ${via}, the only way ${inv.id} allows`;
     const inside = inv.allowed_from.find((d) => changedDomains.has(d));
     if (inside) return `the turn changed ${inside}, the way ${inv.id} allows`;
-    return null;
+    const t = tableOf(inv.allowed_from);
+    return t ? say(t) : null;
   }
   if (inv.kind === 'owns_writes') {
-    const w = s.delta.writes.find((x) => x.table in inv.owners);
-    return w ? `${w.file} newly writes "${w.table}"` : null;
+    const t = s.delta.writes.find((x) => x.table in inv.owners);
+    return t ? `${t.file} newly writes "${t.table}" (owned by ${inv.owners[t.table]})` : null;
   }
-  // no_edge: the protected side changed, or code in the `from` domain gained a dependency outside its own domain
-  // (the checker catches a direct edge into `to`; the rationale may cover indirect routes).
-  if (changedDomains.has(inv.to)) return `the turn changed ${inv.to}, which ${inv.id} keeps ${inv.from} away from`;
-  const reach = [...s.delta.imports.map((i) => ({ from: i.from, to: i.to })), ...s.delta.calls.map((c) => ({ from: fileOf(c.from) ?? c.from, to: fileOf(c.to) ?? c.to }))]
-    .find((e) => domainOf(e.from) === inv.from && domainOf(e.to) !== inv.from);
-  return reach ? `${reach.from} (${inv.from}) newly depends on ${reach.to}` : null;
+  // no_edge: the turn touches files in either domain, or reads/writes a table one of them owns. The checker only sees
+  // a direct import edge; the decision's rationale may cover indirect routes (e.g. a read through neutral shared code).
+  const t = tableOf([inv.from, inv.to]);
+  if (t) return say(t);
+  const end = [inv.from, inv.to].find((d) => changedDomains.has(d));
+  return end ? `the turn changed files in ${end}, an end of ${inv.id} (${inv.from} → ${inv.to})` : null;
 }
 
 /**
  * Standing decisions relevant to a turn, sorted by DR number, each with why:
  * - **anchor**: an anchored path (exact, glob or directory) is a changed file or a file the turn newly imports/calls;
  * - **invariant**: its invariant exempts a changed file; or (only_via) a changed or newly reached file is a target, or
- *   the turn newly reaches / changes an allowed domain; or (owns_writes) the turn newly writes an owned table; or
- *   (no_edge) the `to` domain changed, or code in the `from` domain gained a dependency outside its domain;
+ *   the turn newly reaches / changes an allowed domain, or reads/writes a table it owns; or (owns_writes) the turn newly
+ *   writes an owned table; or (no_edge) the turn changed files in either domain, or newly reads/writes a table
+ *   either domain owns (reads come from `FileFacts.reads`);
  * - **mention**: its title, outcome or rationale names a path the turn touches, or a symbol/file name it changed or calls.
  */
 export function relevantDecisions(decisions: readonly AuditDecision[], map: DomainMap, s: TurnSurface, mapper: Mapper = createMapper(map)): RelevantDecision[] {

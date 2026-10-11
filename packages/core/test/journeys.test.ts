@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path';
 import { scanRepoFacts } from '../src/facts';
 import { parseDomainMap } from '../src/schema';
 import { buildGraph } from '../src/graph';
-import { computeJourneys, findFetchSites, journeyHash, journeySinks, journeySlug, linkFetches, matchRoute, urlPath, type FetchSite } from '../src/journeys';
+import { computeJourneys, findFetchSites, inferDispatch, journeyHash, journeySinks, journeySlug, linkFetches, matchRoute, urlPath, type FetchSite } from '../src/journeys';
 import type { FileFacts, RouteFact } from '../src/contracts/facts';
 import { fixtureRepo, loadMap } from './helpers';
 import { scoutFacts } from './scout-facts';
@@ -236,5 +236,64 @@ describe('computeJourneys: UI page → fetch → route → handler trace', () =>
     expect(computeJourneys(buildGraph(map, fileFacts), fileFacts, findFetchSites([...sources].reverse()))).toEqual(js);
     expect(journeySlug({ kind: 'route', label: 'GET /api/accounts/{}/notes' })).toBe('get-api-accounts-id-notes');
     expect(journeySlug({ kind: 'bin', label: '@scope/x' })).toBe('bin-scope-x');
+  });
+});
+
+/** A tool registry and a provider client: dispatch Tier 1 can't see (`tool?.run(…)`, `client.chat(…)`). */
+const REGISTRY_REPO: Record<string, string> = {
+  'package.json': '{ "name": "registry-fixture", "private": true, "type": "module", "scripts": { "agent": "tsx src/cli.ts" } }',
+  'src/types.ts': 'export interface Tool {\n  name: string;\n  run(input: string): Promise<string>;\n}\n',
+  'src/tools/a.ts': 'import type { Tool } from "../types";\nimport { complete } from "../gateway";\nexport const a: Tool = {\n  name: "a",\n  async run(input) { return complete(input); },\n};\n',
+  'src/tools/b.ts': 'import type { Tool } from "../types";\nimport { Client } from "../../vendor/llm/index";\nconst client = new Client();\nexport const b: Tool = {\n  name: "b",\n  async run(input) { return client.chat(input); },\n};\n',
+  'src/tools/not-a-tool.ts': 'import type { Tool } from "../types";\nexport const helper = { run(x: string) { return x; } };\nexport type T = Tool;\n',
+  'src/registry.ts': 'import { a } from "./tools/a";\nimport { b } from "./tools/b";\nexport const tools = [a, b];\n',
+  'src/agent.ts': 'import type { Tool } from "./types";\nimport { tools } from "./registry";\nexport async function runAgent(name: string) {\n  const tool: Tool | undefined = tools.find((t) => t.name === name);\n  return tool?.run(name);\n}\n',
+  'src/gateway.ts': 'import { Client } from "../vendor/llm/index";\nexport function complete(text: string) {\n  return new Client().chat(text);\n}\n',
+  'src/cli.ts': 'import { runAgent } from "./agent";\nvoid runAgent(process.argv[2] ?? "a");\n',
+  'vendor/llm/index.ts': 'export class Client {\n  chat(text: string) { return text; }\n}\n',
+};
+const REGISTRY_MAP = `
+version: 1
+layers: [{ id: entry, name: Entry }, { id: logic, name: Logic }, { id: external, name: External }]
+neutral: ["src/types.ts"]
+domains:
+  - { id: agent, name: Agent loop, purpose: Runs, cells: { entry: { paths: ["src/cli.ts"] }, logic: { paths: ["src/agent.ts", "src/registry.ts"] } } }
+  - { id: tools, name: Tools, purpose: Tools, cells: { logic: { paths: ["src/tools/**"] } } }
+  - { id: gateway, name: Gateway, purpose: Models, cells: { logic: { paths: ["src/gateway.ts"] }, external: { paths: ["vendor/llm/**"] } } }
+`;
+
+describe('computeJourneys through a registry (inferred dispatch)', () => {
+  const root = mkdtempSync(join(process.env.HARNESS_TEST_TMP ?? tmpdir(), 'harness-registry-'));
+  dirs.push(root);
+  for (const [p, text] of Object.entries(REGISTRY_REPO)) { mkdirSync(dirname(join(root, p)), { recursive: true }); writeFileSync(join(root, p), text); }
+  const map = parseDomainMap(REGISTRY_MAP);
+  const { fileFacts } = scanRepoFacts(root, map);
+  const sources = Object.values(fileFacts).map((f) => ({ path: f.path, source: REGISTRY_REPO[f.path]!, symbols: f.symbols }));
+
+  it('infers interface dispatch (declared implementations only) and calls through a module-level client', () => {
+    expect(inferDispatch(sources, fileFacts).map((e) => `${e.kind} ${e.from} → ${e.to} (${e.confidence})`)).toEqual([
+      'calls src/agent.ts#runAgent → src/types.ts#Tool.run (dispatch)',
+      'calls src/tools/b.ts#b.run → vendor/llm/index.ts#Client (inferred)',
+      'implements src/tools/a.ts#a.run → src/types.ts#Tool.run (dispatch)',
+      'implements src/tools/b.ts#b.run → src/types.ts#Tool.run (dispatch)',
+    ]);
+  });
+
+  it('the main path goes through the registry and the best tool; the other tool is a branch at the hub', () => {
+    const js = computeJourneys(buildGraph(map, fileFacts), fileFacts, [], inferDispatch(sources, fileFacts));
+    expect(js.map((j) => j.id)).toEqual(['journey:cli-agent']);
+    const [j] = js;
+    expect(j!.steps.map((s) => `${s.kind}/${s.confidence} ${s.node}`)).toEqual([
+      'entry/syntactic entry:cli:agent',
+      'symbol/syntactic src/cli.ts',
+      'symbol/syntactic src/agent.ts#runAgent',
+      'symbol/dispatch src/types.ts#Tool.run',
+      'symbol/dispatch src/tools/a.ts#a.run',
+      'symbol/syntactic src/gateway.ts#complete',
+      'vendor/syntactic vendor/llm/index.ts#Client',
+    ]);
+    expect(j!.branches).toEqual([{ from: 3, steps: ['src/tools/b.ts#b.run', 'vendor/llm/index.ts#Client'] }]);
+    // Without inferred edges the flow stops at the agent: nothing past the dynamic call is visible.
+    expect(computeJourneys(buildGraph(map, fileFacts), fileFacts)[0]!.steps.map((s) => s.node)).not.toContain('vendor/llm/index.ts#Client');
   });
 });
