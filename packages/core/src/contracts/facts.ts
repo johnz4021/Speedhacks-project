@@ -41,6 +41,10 @@ export type FileFacts = {
   hash: string; // content hash; Tier 2 results for an older hash are ignored
   imports: { to: string; typeOnly: boolean }[]; // resolved repo paths, or `vendor:<pkg>` for bare imports
   writes: WriteSite[];
+  /** Table reads (`db.get/where("t")`, SQL `FROM/JOIN t`, ORM finds). Optional for older logs. */
+  reads?: WriteSite[];
+  /** Tables a schema file defines (`CREATE TABLE`), with their columns. Optional; only for `.sql` files. */
+  tables?: { name: string; columns: string[] }[];
   symbols: SymbolFact[];
   calls: CallFact[];
   routes: RouteFact[];

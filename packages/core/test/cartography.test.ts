@@ -160,7 +160,7 @@ describe('diffMaps', () => {
       .replace('name: Agent loop', 'name: Run loop')
       .replace('purpose: Store and retrieve notes about each company', 'purpose: Company memory')
       .replace('logic: { paths: ["src/memory/retrieve.ts", "src/memory/vector-index.ts"] }', 'logic: { paths: ["src/memory/retrieve.ts"] }\n      data:  { paths: ["src/memory/notes-store.ts", "src/memory/vector-index.ts"], tables: ["notes", "embeddings"] }\n      external: { paths: [] }')
-      .replace(/      data:  \{ paths: \["src\/memory\/notes-store.ts"\], tables: \["notes", "embeddings"\] \}\n/, '')
+      .replace(/      data:  \{ paths: \["src\/memory\/notes-store.ts", "src\/memory\/schema.sql"\], tables: \["notes", "embeddings"\] \}\n/, '')
       .replace('rule: Research tools never depend on outreach', 'rule: Research tools never import outreach')
       .replace(/  - id: DR-2[\s\S]*?source: cartographer\n\n/, ''));
     const changes = diffMaps(map, next, files);

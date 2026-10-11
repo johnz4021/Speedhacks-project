@@ -176,7 +176,7 @@ describe('living-map loop (fake proposer)', () => {
   });
 
   it('queues a survey while a turn is open, and labels bloated cells once (cached by membership)', async () => {
-    const yaml = `${mapYaml}\ncartography:\n  thresholds: { bloatedCellFiles: 4, bloatedCellShare: 1 }\n`;
+    const yaml = mapYaml.replace('cartography:\n', 'cartography:\n  thresholds: { bloatedCellFiles: 4, bloatedCellShare: 1 }\n');
     const seen: string[] = [];
     const labeler: Labeler = async ({ cell, files }) => {
       seen.push(cell);

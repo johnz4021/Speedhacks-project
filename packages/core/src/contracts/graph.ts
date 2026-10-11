@@ -27,6 +27,7 @@ export type GraphNode = {
   layer?: string; // layer id, for cells and everything inside them
   path?: string; // repo path for files and groups (directory)
   symbol?: { kind: string; exported: boolean };
+  columns?: string[]; // for table nodes, from schema files
 };
 
 export type EdgeKind = 'imports' | 'calls' | 'implements' | 'handles' | 'writes' | 'reads' | 'uses' | 'fetches' | 'starts';
@@ -127,6 +128,11 @@ export type VisibleEdge = {
   violation: ViolationState;
   confidence: CallConfidence | null; // weakest confidence among its call edges, null if none
   steps: number[]; // plan steps, for ghost edges
+  /**
+   * Set on a ghost edge that a standing decision rules out (a plan's `avoided` approach, or a plan/gate violation
+   * citing a decision): drawn struck through, labelled "rejected in DR-4, session 1" (1-based session number).
+   */
+  decision?: { id: string; session: number } | null;
   leafEdges: string[]; // GraphEdge ids (or plan import keys for ghosts)
 };
 

@@ -16,7 +16,7 @@ const ui0 = initialState();
 
 describe('thresholds', () => {
   it('merges cartography.thresholds over the defaults, ignoring unknown keys', () => {
-    const m = parseDomainMap(`${mapYaml}\ncartography:\n  thresholds: { wideTurnsMedian: 4, persist: 3, bogus: 1 }\n`);
+    const m = parseDomainMap(mapYaml.replace('cartography:\n', 'cartography:\n  thresholds: { wideTurnsMedian: 4, persist: 3, bogus: 1 }\n'));
     expect(thresholdsFor(m)).toEqual({ ...DEFAULT_THRESHOLDS, wideTurnsMedian: 4, persist: 3 });
     expect(thresholdsFor(null)).toEqual(DEFAULT_THRESHOLDS);
   });
