@@ -7,7 +7,7 @@ import {
 } from '@anthropic-ai/claude-agent-sdk';
 import { applyEdit, deltaForEdit, check, withExtra, type PlanStep, type Violation, type EventData } from '@harness/core';
 import { harnessTools, violationText, ASK_RULE } from './harness-tools';
-import { listDecisions, parseOption, recordFork } from './decisions';
+import { listDecisions, parseOption, recordFork, recordInAlike } from './decisions';
 import { baseline, numstat, type Baseline } from './git';
 import type { Repo } from './repo';
 import type { Bus } from './bus';
@@ -180,8 +180,9 @@ export class Session {
       this.turn.forkOpen = null;
       this.turn.planViolations = [];
       this.turn.gateBlocks = [];
-      const { decisions, alikeInstruction } = recordFork(this.repo, this.bus, violations, option, t, this.turn.prompt);
-      if (alikeInstruction && process.env.HARNESS_ALIKE !== '0') this.notes.push(alikeInstruction);
+      const { decisions, forAlike } = recordFork(this.repo, this.bus, violations, option, t, this.turn.prompt);
+      // The server records in Alike itself, off the turn; only if the CLI fails does the session get an MCP note.
+      if (process.env.HARNESS_ALIKE !== '0') void recordInAlike(this.repo, this.bus, forAlike).then((notes) => this.notes.push(...notes));
       const ids = decisions.map((d) => d.id).join(', ');
       this.send(`${t}\n\n[Harness: recorded as ${ids || 'a decision'} in decisions/ and domains.yaml. ` +
         (option === 'B' ? `${violations[0]?.file} is now an exception. ` : '') +

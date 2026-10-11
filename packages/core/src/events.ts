@@ -62,7 +62,7 @@ export type EventData = {
   edge_added: { edge: ImportEdge; from: string; to: string };
   edge_removed: { edge: ImportEdge; from: string; to: string };
   test_result: { domain: string; passed: number; failed: number };
-  decision_recorded: { id: string; title: string; invariant: string; option: 'A' | 'B'; paths: string[]; alike?: boolean };
+  decision_recorded: { id: string; title: string; invariant: string; option: 'A' | 'B'; paths: string[]; alike?: boolean; urn?: string };
   turn_ended: { added: number; removed: number; files: string[]; reason: string };
   chat: { role: 'user' | 'assistant' | 'system'; text: string };
   approval_requested: { plan: string };

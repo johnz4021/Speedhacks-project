@@ -1,8 +1,9 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
-import { linkDecision, addException, nextDecisionId, type Violation } from '@harness/core';
-import { commitPaths, git } from './git';
+import { linkDecision, addException, nextDecisionId, globMatcher, type Violation, type Invariant, type EventData } from '@harness/core';
+import { commitPaths } from './git';
+import { alikeDecision, recordDecision, repoSlug, mcpInstruction, type AlikeDecision, type ExecFn } from './alike';
 import type { Repo } from './repo';
 import type { Bus } from './bus';
 
@@ -16,6 +17,7 @@ export type DecisionRecord = {
   anchors: { paths: string[] };
   rejected: string;
   rationale: string;
+  alike_urn?: string; // set once the decision is in Alike; never recorded twice
 };
 
 /** Read `decisions/DR-*.md` (front matter + body). */
@@ -51,21 +53,6 @@ export function titleFromAnswer(answer: string): string | null {
 }
 
 /**
- * `owner/name`, which Alike's path anchors require: HARNESS_REPO_SLUG, else the origin remote,
- * else `<git user>/<folder>` for a repo with no remote.
- */
-function repoAnchor(root: string) {
-  if (process.env.HARNESS_REPO_SLUG) return { repository: process.env.HARNESS_REPO_SLUG };
-  try {
-    const m = /[:/]([^/:]+\/[^/]+?)(?:\.git)?$/.exec(git(root, ['remote', 'get-url', 'origin']));
-    if (m) return { repository: m[1]! };
-  } catch { /* no remote */ }
-  let owner = 'local';
-  try { owner = git(root, ['config', 'user.name']).replace(/[^\w.-]+/g, '-') || owner; } catch { /* unset */ }
-  return { repository: `${owner}/${basename(root)}` };
-}
-
-/**
  * An answered fork becomes a standing decision (SPEC §8): write decisions/DR-n.md, update domains.yaml
  * (A links the decision to the invariant, B adds an exception), commit just those two files, emit
  * `decision_recorded`, and return the instruction that asks Claude to record it in Alike.
@@ -84,9 +71,8 @@ export function recordFork(repo: Repo, bus: Bus, violations: Violation[], option
     const files = [...new Set(vs.map((v) => v.file))];
     const v0 = vs[0]!;
     const [chosen, rejected] = option === 'A' ? [v0.options[0], v0.options[1]] : [v0.options[1], v0.options[0]];
-    const title = titleFromAnswer(answer) ?? (option === 'A'
-      ? `${files.join(', ')} follows ${inv.id}: ${inv.rule}`
-      : `Exception to ${inv.id} for ${files.join(', ')}`);
+    // The principle, not the incident: the user's own sentence, else the rule they upheld.
+    const title = titleFromAnswer(answer) ?? (option === 'A' ? inv.rule : `Exception to ${inv.id} for ${files.join(', ')}`);
     const rec: DecisionRecord = {
       id, title, outcome: chosen, status: 'made', type: 'standing', invariant: inv.id,
       anchors: { paths: files }, rejected,
@@ -103,7 +89,7 @@ export function recordFork(repo: Repo, bus: Bus, violations: Violation[], option
     made.push(rec);
     yamlText = option === 'A' ? linkDecision(yamlText, inv.id, id) : addException(yamlText, inv.id, files[0]!, id);
   }
-  if (!made.length) return { decisions: [], alikeInstruction: '' };
+  if (!made.length) return { decisions: [], forAlike: [] };
 
   mkdirSync(join(repo.root, 'decisions'), { recursive: true });
   const paths: string[] = ['domains.yaml'];
@@ -123,18 +109,63 @@ export function recordFork(repo: Repo, bus: Bus, violations: Violation[], option
     bus.emit('decision_recorded', { id: d.id, title: d.title, invariant: d.invariant, option, paths: d.anchors.paths, alike: false });
   }
 
-  const anchor = repoAnchor(repo.root);
-  // Field names checked against Alike's record_decision schema (VERIFY.md, step 0d).
-  const alikeInstruction = made.map((d) => {
-    const args = {
-      title: `${d.id}: ${d.title}`,
-      outcome: d.outcome,
-      rationale: d.rationale.replace(/\n+/g, ' '),
-      decision_type: 'standing',
-      status: 'made',
-      anchors: d.anchors.paths.map((path) => ({ kind: 'path', label: 'governs', path, repository: anchor.repository })),
-    };
-    return `Record ${d.id} in Alike now: call mcp__alike__record_decision with exactly these arguments: ${JSON.stringify(args)}. If the Alike tools are unavailable, skip this silently.`;
-  }).join('\n');
-  return { decisions: made, alikeInstruction };
+  const session = sessionNumber(bus);
+  const invariants = new Map(repo.map.invariants.map((i) => [i.id, i] as [string, Invariant]));
+  const forAlike = made.map((d) => ({
+    id: d.id,
+    decision: alikeDecision(repo.map, {
+      id: d.id, title: d.title, outcome: d.outcome, rejected: d.rejected, option, invariant: invariants.get(d.invariant)!,
+      files: d.anchors.paths, answer, session,
+    }, repoSlug(repo.root), (glob) => concreteFolders(repo.facts.files, glob)),
+  }));
+  return { decisions: made, forAlike };
+}
+
+/** 1-based number of the current coding session ("decided in session 2"). */
+function sessionNumber(bus: Bus): number {
+  const seen: string[] = [];
+  for (const e of bus.events) if (!seen.includes(e.session)) seen.push(e.session);
+  if (!seen.includes(bus.session)) seen.push(bus.session);
+  return seen.indexOf(bus.session) + 1;
+}
+
+/** Folders Alike can anchor for a glob it can't take: `vendor/llm-*` + `/**` → `vendor/llm-anthropic/`, … */
+function concreteFolders(files: readonly string[], glob: string): string[] {
+  const match = globMatcher(glob);
+  const depth = glob.split('/').findIndex((seg) => /[*?[{]/.test(seg));
+  const out = new Set<string>();
+  for (const f of files) {
+    if (!match(f)) continue;
+    const parts = f.split('/');
+    out.add(depth >= 0 && depth < parts.length - 1 ? `${parts.slice(0, depth + 1).join('/')}/` : f);
+  }
+  return [...out].sort();
+}
+
+/**
+ * Record decisions in Alike from the server (async, after the commit; never in the hot path). On success the
+ * URN is written into the DR file (committed alone) and `decision_recorded { alike: true, urn }` is emitted.
+ * Returns MCP fallback instructions for any decision the CLI couldn't record.
+ */
+export async function recordInAlike(repo: Repo, bus: Bus, items: { id: string; decision: AlikeDecision }[], exec?: ExecFn): Promise<string[]> {
+  const fallback: string[] = [];
+  for (const { id, decision } of items) {
+    const rel = `decisions/${id}.md`;
+    const path = join(repo.root, rel);
+    if (!existsSync(path)) continue;
+    const before = listDecisions(repo.root).find((d) => d.id === id);
+    if (before?.alike_urn) continue;
+    try {
+      const urn = await recordDecision(decision, exec);
+      const text = readFileSync(path, 'utf8');
+      writeFileSync(path, text.replace(/\n---\n/, `\nalike_urn: ${urn}\n---\n`));
+      try { commitPaths(repo.root, [rel], `docs(decisions): ${id} recorded in Alike`); } catch { /* the URN stays in the working tree */ }
+      const prev = bus.events.find((e) => e.kind === 'decision_recorded' && (e.data as { id: string }).id === id);
+      if (prev) bus.emit('decision_recorded', { ...(prev.data as EventData['decision_recorded']), alike: true, urn }, { turn: prev.turn });
+    } catch (e) {
+      bus.emit('error', { message: `Alike didn't record ${id} (${(e as Error).message.split('\n')[0]}); asking the session instead.` });
+      fallback.push(mcpInstruction(decision));
+    }
+  }
+  return fallback;
 }
