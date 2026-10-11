@@ -6,7 +6,7 @@ import {
   type CanUseTool, type PermissionResult, type McpServerConfig,
 } from '@anthropic-ai/claude-agent-sdk';
 import { applyEdit, deltaForEdit, check, withExtra, type PlanStep, type Violation, type EventData } from '@harness/core';
-import { harnessTools, violationText, ASK_RULE } from './harness-tools';
+import { harnessTools, violationText, decidedText, splitDecided, ASK_RULE } from './harness-tools';
 import { listDecisions, parseOption, recordFork, recordInAlike } from './decisions';
 import { baseline, numstat, type Baseline } from './git';
 import type { Repo } from './repo';
@@ -16,6 +16,8 @@ const PLAN_RULES = [
   'Explore read-only, briefly. Then, before editing anything, call mcp__harness__submit_plan with numbered steps.',
   'Each step lists the exact repo-relative file paths it will create or modify, and every new import it adds as { from: path, to: path }.',
   'If the result contains violations: ' + ASK_RULE,
+  'If a violation is ALREADY DECIDED in a standing decision (DR-n), do not ask: plan it the decided way and resubmit.',
+  'If a standing decision rules out the obvious approach, plan the decided way and list the avoided approach in `avoided` with the decision id.',
   'After the user answers, resubmit the plan with mcp__harness__submit_plan, then call ExitPlanMode.',
   'If there are no violations, call ExitPlanMode with a short plan.',
 ].join('\n');
@@ -236,7 +238,8 @@ export class Session {
     const turn = this.turn;
     if (!turn) return;
     if (subtype !== 'success') this.bus.emit('error', { message: `Turn ended with ${subtype}` });
-    const open = [...turn.planViolations, ...turn.gateBlocks];
+    // Only undecided violations are forks; decision-backed ones were answered before (beat 4) and never re-asked.
+    const open = splitDecided([...turn.planViolations, ...turn.gateBlocks]).open;
     if (open.length && subtype === 'success') {
       // Claude stopped to ask: the turn stays open until the user answers.
       turn.forkOpen = open;
@@ -326,11 +329,17 @@ export class Session {
     }
     for (const v of violations) this.bus.emit('gate_blocked', { violation: v, tool: i.tool_name }, { path: rel, cell: this.repo.cellOf(rel) });
     this.turn?.gateBlocks.push(...violations);
+    const { open, decided } = splitDecided(violations);
+    const why = [
+      'Harness blocked this edit.',
+      ...(open.length ? [violationText(open), ASK_RULE] : []),
+      ...(decided.length ? [...decided.map((v) => v.reason), decidedText(this.repo.root, decided)] : []),
+    ];
     return {
       hookSpecificOutput: {
         hookEventName: 'PreToolUse',
         permissionDecision: 'deny',
-        permissionDecisionReason: `Harness blocked this edit.\n${violationText(violations)}\n${ASK_RULE}`,
+        permissionDecisionReason: why.join('\n'),
       },
     };
   };
@@ -362,7 +371,9 @@ export class Session {
         return { behavior: 'deny', message: 'Call mcp__harness__submit_plan with your numbered steps before exiting plan mode.' };
       }
       if (turn?.planViolations.length) {
-        return { behavior: 'deny', message: `The plan has unresolved violations.\n${violationText(turn.planViolations)}\n${ASK_RULE}` };
+        const { open, decided } = splitDecided(turn.planViolations);
+        if (open.length) return { behavior: 'deny', message: `The plan has unresolved violations.\n${violationText(open)}\n${ASK_RULE}` };
+        return { behavior: 'deny', message: `The plan crosses a decided rule.\n${decidedText(this.repo.root, decided)}\nResubmit the plan with mcp__harness__submit_plan.` };
       }
       const plan = String((input as { plan?: unknown }).plan ?? '');
       this.bus.emit('approval_requested', { plan });

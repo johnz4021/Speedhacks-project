@@ -21,3 +21,13 @@ export { createRepoResolver, packageName, workspaceDirs } from './facts/resolver
 export { packageEntries } from './facts/entries';
 export { normalizeRoutePath } from './facts/routes';
 export { hashText } from './facts/hash';
+// Tier 2 semantic facts (NAVIGATION_PLAN §3.1): node-only. The resolvers (tsgo, ts-morph) run in a child process
+// started by `startSemantic`; their heavy modules load only there.
+export { startSemantic, SEMANTIC_DEBOUNCE_MS, type SemanticClient, type SemanticClientOptions, type SemanticStatus } from './facts/semantic/client';
+export { KeyedDebounce } from './facts/semantic/debounce';
+export { SemanticEngine } from './facts/semantic/engine';
+export { openResolver, type ResolverChoice } from './facts/semantic/open';
+export { semanticFacts, type ResolveStats } from './facts/semantic/resolve';
+export type { DeclInfo, ResolverImpl, SemanticResolver } from './facts/semantic/types';
+export { moduleRecord, type ModuleRecord } from './facts/record';
+export { findReads, parseSqlTables, sqlFacts } from './facts/tables';

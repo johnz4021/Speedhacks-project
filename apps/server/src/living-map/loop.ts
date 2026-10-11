@@ -11,7 +11,8 @@ import {
 import { commitPaths } from '../git';
 import type { Bus } from '../bus';
 import type { Repo } from '../repo';
-import { gitHistory, toFileFacts } from './history';
+import { gitHistory } from './history';
+import { semanticStore } from '../semantic';
 import { sdkProposer, type Candidate, type Proposer } from './runner';
 import { listRejected, listStanding, writeRejection } from './records';
 import { labelsFor, sdkLabeler, type Labeler } from './labels';
@@ -76,7 +77,8 @@ export function attachLivingMap(opts: LivingMapOptions) {
   const track = <T>(p: Promise<T>) => { work.add(p); const off = () => { work.delete(p); }; p.then(off, off); return p; };
 
   const ready = () => !!repo.map && repo.hasMap();
-  const facts = (): Record<string, FileFacts> => toFileFacts(repo.facts);
+  /** Real Tier 1 facts, with Tier 2 calls where current (the same facts the graph is built from). */
+  const facts = (): Record<string, FileFacts> => semanticStore(repo, bus).merged();
   const history = (ui: UIState): HistoryTurn[] => [...gitHistory(repo.root, opts.gitLimit), ...historyFromUI(ui)];
 
   /** Ids plus the domains they live in (files and cells), so scopes can be compared at domain granularity. */

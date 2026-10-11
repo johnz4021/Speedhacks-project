@@ -7,6 +7,7 @@ import { hashText, squash } from './hash';
 import { BULK_MIN, isMinified, parseModule, parseName, remember, type ModuleRecord } from './record';
 import { packageName } from './resolver';
 import { nextRoutes, routeFact } from './routes';
+import { findReads, sqlFacts } from './tables';
 
 /** `(from, spec)` → repo path, `vendor:<pkg>`, or null (unresolved). */
 export type Resolve = (from: string, spec: string) => string | null;
@@ -19,20 +20,27 @@ export type ExtractContext = {
   recordOf?: (file: string) => ModuleRecord | null;
   /** package.json entries that run this file. A `script` whose file reads its arguments becomes a `cli` entry. */
   entries?: readonly PackageEntry[];
-  /** `cartography.routes` in domains.yaml: `pattern` is a JS regex source with `method` and `path` groups (or groups 1, 2). */
+  /**
+   * `cartography.routes` in domains.yaml (documented in schema.ts): `file` is a glob; `pattern` is a JS regex source matched
+   * against that file's text (comments masked), with named groups `method` and `path` (or groups 1 and 2).
+   */
   routes?: readonly { file: string; pattern: string }[];
 };
 
 /** Reads CLI arguments (`process.argv.slice(2)`, `argv[2]`, `parseArgs(…)`), not just the `argv[1]` is-main check. */
 const READS_ARGS = /\bprocess\s*\.\s*argv\s*(?:\.\s*(?:slice|includes|indexOf|filter|find)\b|\[\s*[2-9])|\bparseArgs\s*\(/;
 
-/** Tier 1 facts for `path`. Large (> ~500 KB) or minified files get imports, writes and file routes only. */
+/**
+ * Tier 1 facts for `path`. Large (> ~500 KB) or minified files get imports, writes, reads and file routes only;
+ * `.sql` files get the tables they create (with columns).
+ */
 export function extractFacts(path: string, source: string, resolve: Resolve, ctx: ExtractContext = {}): FileFacts {
   return extract(path, source, resolve, ctx).facts;
 }
 
 /** `extractFacts`, plus whether the source parsed (when it didn't, symbols and calls are empty, not "all removed"). */
 export function extract(path: string, source: string, resolve: Resolve, ctx: ExtractContext = {}): { facts: FileFacts; parsed: boolean } {
+  if (path.endsWith('.sql')) return { facts: sqlFacts(path, source), parsed: true };
   const { record, parsed } = parseModule(path, source);
   remember(path, source, record);
   const facts: FileFacts = { path, hash: hashText(source), imports: [], writes: [], symbols: [], calls: [], routes: [], entries: [] };
@@ -78,6 +86,12 @@ export function extract(path: string, source: string, resolve: Resolve, ctx: Ext
     writes.set(`${site.table}\u0000${site.symbol}\u0000${site.via}`, site);
   }
   facts.writes = [...writes.values()];
+  const reads = new Map<string, WriteSite>();
+  for (const hit of findReads(code)) {
+    const site = { table: hit.table, symbol: w.innermost(hit.at), via: hit.via };
+    reads.set(`${site.table}\u0000${site.symbol}\u0000${site.via}`, site);
+  }
+  facts.reads = [...reads.values()];
 
   const entries = new Map<string, EntryFact>();
   const entry = (kind: EntryFact['kind'], label: string, symbol: string | null) =>
@@ -103,9 +117,10 @@ function customRoutes(path: string, code: string, patterns: readonly { file: str
     }
     const matches = [...code.matchAll(re)];
     matches.forEach((m, i) => {
-      const g = m.groups ?? {};
-      const method = g.method ?? (m.length > 2 ? m[1] : undefined) ?? 'ANY';
-      const raw = g.path ?? (m.length > 2 ? m[2] : m[1]);
+      // Named groups `method` and `path` when the pattern names `path`; otherwise groups 1 and 2 (a lone group is the path).
+      const named = m.groups?.path !== undefined;
+      const method = (named ? m.groups!.method : m.length > 2 ? m[1] : undefined) ?? 'ANY';
+      const raw = named ? m.groups!.path : m.length > 2 ? m[2] : m[1];
       if (raw === undefined) return;
       const end = m.index + m[0].length;
       const stop = matches[i + 1]?.index ?? code.length;
@@ -365,6 +380,9 @@ class Walker {
         if ((m.type === 'MethodDefinition' || m.type === 'TSAbstractMethodDefinition') && key && value?.body) {
           for (const dec of m.decorators ?? []) this.visit(dec);
           this.fn(m.kind === 'constructor' ? 'constructor' : key, value, false, sym, m, 'method');
+        } else if (m.type === 'TSAbstractMethodDefinition' && key && value) {
+          // No body, but a symbol: calls through it are dispatch and subclasses implement it (Tier 2).
+          this.define(key, 'method', false, sym, m, `abstract ${this.fnSig(value)}`, '');
         } else if (m.type === 'PropertyDefinition' && key && value && FN.has(value.type)) {
           this.fn(key, value, false, sym, m, 'method');
         } else this.visit(m);

@@ -9,8 +9,8 @@ import { Bus } from './bus';
 import { Repo } from './repo';
 import { Session } from './session';
 import { commitPaths } from './git';
-import { proposeMap } from './cartographer';
-import { attachLivingMap, livingMapRoutes, onboardingSkeleton } from './living-map'; // living map (NAVIGATION_PLAN §4)
+import { attachLivingMap, livingMapRoutes, onboardingSkeleton, proposeOnboarding, sdkProposer } from './living-map'; // living map (NAVIGATION_PLAN §4)
+import { attachSemantic } from './semantic'; // Tier 2 semantic facts (NAVIGATION_PLAN §3.1)
 
 const here = dirname(fileURLToPath(import.meta.url));
 const REPO = process.env.HARNESS_REPO ? resolve(process.env.INIT_CWD ?? process.cwd(), process.env.HARNESS_REPO) : '';
@@ -30,6 +30,8 @@ const broadcast = (msg: unknown) => {
 bus.on((event) => broadcast({ type: 'event', event }));
 
 const repo = new Repo(REPO, bus);
+// Tier 2 runs in a child process fed by repo_scanned / facts_changed; its status is ephemeral (not in the log).
+const semantic = attachSemantic(bus, repo, { onStatus: (status) => broadcast({ type: 'semantic', status }), log: (l) => console.log(l) });
 let session: Session | null = null;
 let proposal: { yaml: string; source: 'cartographer' | 'fixture' } | null = null;
 let busy = false;
@@ -44,7 +46,10 @@ function startSession() {
   session.start();
 }
 
-/** Load: use domains.yaml if present; otherwise propose one (cartographer, else the fixture) and wait for Confirm. */
+/**
+ * Load: use domains.yaml if present. Otherwise show the instant skeleton, then the best of the cartographer's K scored
+ * candidates (HARNESS_CARTOGRAPHER=0, or a failed/empty run: the reference map), and wait for Confirm.
+ */
 async function load() {
   if (repo.hasMap()) {
     repo.loadMapFile();
@@ -52,20 +57,28 @@ async function load() {
     startSession();
     return;
   }
-  // ---- living map: show the instant deterministic skeleton while the cartographer works (NAVIGATION_PLAN §4.2) ----
+  // ---- living map: the instant deterministic skeleton while the cartographer works (NAVIGATION_PLAN §4.2) ----
   showProposal(onboardingSkeleton(repo.root), 'cartographer');
-  // ---- end living map ----
   let yaml: string;
   let source: 'cartographer' | 'fixture' = 'cartographer';
   try {
     if (process.env.HARNESS_CARTOGRAPHER === '0') throw new Error('disabled');
-    yaml = await proposeMap(repo, bus);
+    const k = Number(process.env.HARNESS_CARTOGRAPHER_K ?? 4);
+    const best = await proposeOnboarding({ root: repo.root, bus, proposer: sdkProposer, k });
+    if (!best) throw new Error('no valid candidate map');
+    yaml = best.yaml;
+    const s = best.score;
+    bus.emit('chat', {
+      role: 'system',
+      text: `Cartographer: best of ${best.scored} scored candidate map(s): ${best.candidate.title} · a typical commit lights ${s.cellsLitMean.toFixed(1)} cells (skeleton ${best.skeleton.cellsLitMean.toFixed(1)}); ${s.unassigned} files unassigned.`,
+    }, { turn: null });
   } catch (e) {
     if ((e as Error).message !== 'disabled') bus.emit('error', { message: `Cartographer failed, using the reference map: ${(e as Error).message}` }, { turn: null });
     yaml = readFileSync(FALLBACK_MAP, 'utf8');
     source = 'fixture';
   }
-  if (session) return; // living map: the user confirmed the skeleton before the cartographer answered
+  // ---- end living map ----
+  if (session) return; // the user confirmed the skeleton before the cartographer answered
   showProposal(yaml, source);
 }
 
@@ -86,6 +99,7 @@ app.route('/api', livingMapRoutes(living));
 // ---- end living map ----
 app.get('/api/info', (c) => c.json({ repo: REPO, session: bus.session, busy, proposal: !!proposal }));
 app.get('/api/events', (c) => c.json(bus.events));
+app.get('/api/semantic', (c) => c.json(semantic?.status() ?? { state: 'off' }));
 app.post('/api/chat', async (c) => {
   const { text } = await c.req.json<{ text: string }>();
   if (!session) return c.json({ error: 'Confirm the map first.' }, 409);
@@ -130,6 +144,6 @@ wss.on('connection', (ws) => {
 
 void load();
 
-const shutdown = async () => { await repo.close(); process.exit(0); };
+const shutdown = async () => { await semantic?.close(); await repo.close(); process.exit(0); };
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);

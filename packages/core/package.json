@@ -17,6 +17,8 @@
     "oxc-parser": "0.153.0",
     "oxc-resolver": "11.24.2",
     "picomatch": "^4.0.2",
+    "ts-morph": "28.0.0",
+    "typescript-7": "npm:typescript@7.0.2",
     "yaml": "^2.6.1",
     "zod": "^4.0.0"
   },
