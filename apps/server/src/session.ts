@@ -167,12 +167,15 @@ export class Session {
           const ev = m.event as { type: string; delta?: { type: string; text?: string } };
           if (ev.type === 'content_block_delta' && ev.delta?.type === 'text_delta' && ev.delta.text) this.ephemeral({ type: 'delta', text: ev.delta.text });
         } else if (m.type === 'assistant' && !m.parent_tool_use_id) {
+          // Server log only (not the event log): which tools the session used, e.g. graph tools vs file reads (beat 1).
+          for (const b of m.message.content) if (b.type === 'tool_use') console.log(`[session] tool ${(b as { name: string }).name}`);
           const t = m.message.content.filter((b) => b.type === 'text').map((b) => (b as { text: string }).text).join('\n').trim();
           if (t) {
             this.bus.emit('chat', { role: 'assistant', text: t });
             if (this.turn) this.turn.lastText = t;
           }
         } else if (m.type === 'result') {
+          console.log(`[session] result ${m.subtype} · $${m.total_cost_usd.toFixed(4)} · ${m.num_turns} turns · ${(m.duration_ms / 1000).toFixed(0)} s`);
           this.onResult(m.subtype);
         }
       }
@@ -377,7 +380,7 @@ export class Session {
     if (!rel) return {};
     const change = this.repo.fileChanged(rel, { tool: i.tool_name });
     if (!change) return {};
-    const fresh = editTouchesFor(this.repo, this.bus, rel, change.symbols).filter((t) => !this.turn?.reminded.has(t.id));
+    const fresh = editTouchesFor(this.repo, this.bus, rel, change.symbols, change.outside).filter((t) => !this.turn?.reminded.has(t.id));
     if (!fresh.length) return {};
     for (const t of fresh) this.turn?.reminded.add(t.id);
     return { hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: fresh.map((t) => t.text).join('\n') } };

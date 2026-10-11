@@ -70,10 +70,10 @@ export function planTouches(repo: Repo, bus: Bus, steps: readonly PlanStep[]): s
  * { source: 'edit' }` for each decision it touches and returns those decisions with their reminders; the caller
  * decides which reminders reach Claude (once per decision per turn).
  */
-export function editTouchesFor(repo: Repo, bus: Bus, path: string, diff: SymbolDiff | null | undefined): { id: string; text: string }[] {
+export function editTouchesFor(repo: Repo, bus: Bus, path: string, diff: SymbolDiff | null | undefined, outside = false): { id: string; text: string }[] {
   const out: { id: string; text: string }[] = [];
   for (const d of protecting(repo.root)) {
-    const t = editTouches(d.protects, path, diff);
+    const t = editTouches(d.protects, path, diff, outside);
     if (!t) continue;
     bus.emit('decision_touched', { decision: d.id, principle: d.title, paths: t.paths, symbols: t.symbols, source: 'edit' }, { path, cell: repo.cellOf(path) });
     out.push({ id: d.id, text: touchReminder(bus, d, t, 'edit') });

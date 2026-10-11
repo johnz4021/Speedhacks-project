@@ -150,14 +150,15 @@ describe('edits that touch protected code (PostToolUse)', () => {
     session.userMessage('We\'re seeing account numbers in briefs. Can we redact every long number?');
     const hook = (path: string) => s.afterEdit({ tool_name: 'Edit', tool_input: { file_path: join(root, path) } }, undefined, { signal: new AbortController().signal });
 
-    // An edit that changes no protected symbol: nothing.
-    appendFileSync(join(root, 'src/gateway/redact.ts'), '\nexport const LONG_NUMBER = /\\d{8,}/g;\n');
+    // An edit that only adds a function (and a comment and an import): nothing.
+    const before = readFileSync(join(root, 'src/gateway/redact.ts'), 'utf8');
+    writeFileSync(join(root, 'src/gateway/redact.ts'), `import { db } from "../shared/db";\n${before}\n// Account numbers.\nexport function maskAccount(s: string) {\n  return s.replace(/\\d{8,}/g, "[ACCOUNT]");\n}\n`);
     expect(await hook('src/gateway/redact.ts')).toEqual({});
     expect(of('decision_touched')).toHaveLength(0);
 
     // The protected function's body changes: reminder.
     const text = readFileSync(join(root, 'src/gateway/redact.ts'), 'utf8');
-    writeFileSync(join(root, 'src/gateway/redact.ts'), text.replace('if (mode === "filing") return text;', 'if (mode === "filing") return text;\n  text = text.replace(LONG_NUMBER, "[NUMBER]");'));
+    writeFileSync(join(root, 'src/gateway/redact.ts'), text.replace('if (mode === "filing") return text;', 'if (mode === "filing") return text;\n  text = maskAccount(text);'));
     const first = await hook('src/gateway/redact.ts');
     expect(first.hookSpecificOutput).toEqual({
       hookEventName: 'PostToolUse',
@@ -172,6 +173,34 @@ describe('edits that touch protected code (PostToolUse)', () => {
       ['edit', ['test/gateway/complete.test.ts'], []],
     ]);
     expect(of('edited').at(-1)).toMatchObject({ tool: 'Edit' });
+  });
+
+  it('a change to a module-level const (a shared pattern Tier 1 lists as no symbol) touches the protected symbols in that file', async () => {
+    const { root, repo, bus, of } = protectedSetup();
+    const session = new Session(repo, bus, () => {});
+    const s = session as unknown as Inner;
+    session.userMessage('Redact every long number');
+    const path = join(root, 'src/gateway/redact.ts');
+    writeFileSync(path, `const LONG = /\\d{8,}/g;\n${readFileSync(path, 'utf8')}`);
+    const out = await s.afterEdit({ tool_name: 'Edit', tool_input: { file_path: path } }, undefined, { signal: new AbortController().signal });
+    expect(out.hookSpecificOutput?.additionalContext).toContain('This edit touches what DR-4 protects');
+    expect(of('decision_touched').at(-1)).toMatchObject({ source: 'edit', paths: ['src/gateway/redact.ts'], symbols: ['src/gateway/redact.ts#redact'] });
+  });
+});
+
+describe('changedOutsideSymbols', () => {
+  const sym = (name: string, start: number, end: number) => ({ id: `a.ts#${name}`, file: 'a.ts', name, kind: 'function' as const, exported: true, parent: null, span: { start, end }, sigHash: '', bodyHash: '' });
+  it('flags changed lines outside every symbol span, ignoring blank lines, comments and imports', async () => {
+    const { diffLines } = await import('diff');
+    const { changedOutsideSymbols } = await import('../../../apps/server/src/repo');
+    const a = 'const P = /a/;\nfunction f() {\n  return 1;\n}\n';
+    const fSpan = (text: string) => [sym('f', text.indexOf('function'), text.indexOf('}') + 1)];
+    const inBody = a.replace('return 1', 'return 2');
+    expect(changedOutsideSymbols(diffLines(a, inBody), fSpan(a), fSpan(inBody))).toBe(false);
+    const constChanged = a.replace('/a/', '/b/');
+    expect(changedOutsideSymbols(diffLines(a, constChanged), fSpan(a), fSpan(constChanged))).toBe(true);
+    const inert = `import x from "y";\n// note\n\n${a}`;
+    expect(changedOutsideSymbols(diffLines(a, inert), fSpan(a), fSpan(inert))).toBe(false);
   });
 });
 

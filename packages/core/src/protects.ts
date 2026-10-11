@@ -106,14 +106,18 @@ export function stepTouches(p: Protects, step: Pick<PlanStep, 'files' | 'imports
 /**
  * An edit to `path` touches protected code when the file is protected whole (any change), or when its symbol diff
  * changes a protected symbol (or one containing or inside it): `sig`, `body`, `removed`, or the old side of `renamed`.
- * Added symbols never touch a symbol-protected file. Without a symbol diff (not code, or text that didn't parse) only
- * whole-file protection applies.
+ * Added symbols never touch a symbol-protected file. `outside`: the edit changed code outside every symbol (a
+ * module-level const such as a shared pattern, a top-level statement; not imports or comments), which can change what
+ * the protected symbols do, so it touches all of them in that file. Without a symbol diff (not code, or text that
+ * didn't parse) only whole-file protection and `outside` apply.
  */
-export function editTouches(p: Protects, path: string, diff: SymbolDiff | null | undefined): Touch | null {
+export function editTouches(p: Protects, path: string, diff: SymbolDiff | null | undefined, outside = false): Touch | null {
   const { bySymbolFile, whole } = index(p);
   if (whole.has(path)) return result([path], []);
   const protectedHere = bySymbolFile.get(path);
-  if (!protectedHere || !diff) return null;
+  if (!protectedHere) return null;
+  if (outside) return result([path], protectedHere);
+  if (!diff) return null;
   const changed = [...diff.sig, ...diff.body, ...diff.removed, ...diff.renamed.map((r) => r[0])];
   const symbols = protectedHere.filter((ps) => changed.some((c) => related(c, ps)));
   return symbols.length ? result([path], symbols) : null;

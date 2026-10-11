@@ -92,6 +92,14 @@ describe('editTouches (edits)', () => {
     expect(editTouches(P, 'src/gateway/redact.ts', diff({ body: ['src/gateway/redact.ts#PHONE_PATTERN'] }))).toBeNull();
   });
 
+  it('a change outside every symbol (a shared module-level pattern) touches all protected symbols in that file', () => {
+    expect(editTouches(P, 'src/gateway/redact.ts', diff({}), true)).toEqual({
+      paths: ['src/gateway/redact.ts'],
+      symbols: ['src/gateway/redact.ts#RedactionMode', 'src/gateway/redact.ts#Redactor', 'src/gateway/redact.ts#Redactor.redact', 'src/gateway/redact.ts#redactMessages'],
+    });
+    expect(editTouches(P, 'src/tools/index.ts', diff({}), true)).toBeNull();
+  });
+
   it('any change to a file protected whole touches it, even without a symbol diff; other files never do', () => {
     expect(editTouches(P, 'test/gateway/redact.test.ts', null)).toEqual({ paths: ['test/gateway/redact.test.ts'], symbols: [] });
     expect(editTouches(P, 'src/gateway/redact.ts', null)).toBeNull();
