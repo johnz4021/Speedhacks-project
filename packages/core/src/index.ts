@@ -31,3 +31,6 @@ export { semanticFacts, type ResolveStats } from './facts/semantic/resolve';
 export type { DeclInfo, ResolverImpl, SemanticResolver } from './facts/semantic/types';
 export { moduleRecord, type ModuleRecord } from './facts/record';
 export { findReads, parseSqlTables, sqlFacts } from './facts/tables';
+// Auditor (N9) and journeys (N10): pure helpers; the model calls live in the server.
+export * from './audit';
+export * from './journeys';

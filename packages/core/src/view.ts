@@ -17,3 +17,7 @@ export * from './cartography';
 export * from './graph';
 // Facts lane: which symbols an edit changed.
 export { diffSymbols } from './facts/diff';
+// Journeys (N10): computation and fetch → route matching.
+export * from './journeys';
+// Auditor (N9): finding signatures and dismissal matching.
+export { findingSignature, normalizeFindingText, isDismissed, textSimilarity, type RawFinding, type DismissedFinding } from './audit/findings';

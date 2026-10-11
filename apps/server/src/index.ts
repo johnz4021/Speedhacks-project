@@ -11,6 +11,8 @@ import { Session } from './session';
 import { commitPaths } from './git';
 import { attachLivingMap, livingMapRoutes, onboardingSkeleton, proposeOnboarding, sdkProposer } from './living-map'; // living map (NAVIGATION_PLAN §4)
 import { attachSemantic } from './semantic'; // Tier 2 semantic facts (NAVIGATION_PLAN §3.1)
+import { attachAuditor, auditorRoutes } from './auditor'; // auditor (N9)
+import { attachJourneys, journeyRoutes } from './journeys'; // journeys (N10)
 
 const here = dirname(fileURLToPath(import.meta.url));
 const REPO = process.env.HARNESS_REPO ? resolve(process.env.INIT_CWD ?? process.cwd(), process.env.HARNESS_REPO) : '';
@@ -97,6 +99,12 @@ const app = new Hono();
 const living = attachLivingMap({ bus, repo });
 app.route('/api', livingMapRoutes(living));
 // ---- end living map ----
+// ---- auditor + journeys (NAVIGATION_PLAN §4.6, N9/N10): advisory findings after each turn; journeys on load/turn end ----
+const auditorLoop = attachAuditor({ bus, repo });
+app.route('/api', auditorRoutes(auditorLoop));
+const journeysLoop = attachJourneys({ bus, repo });
+app.route('/api', journeyRoutes(journeysLoop));
+// ---- end auditor + journeys ----
 app.get('/api/info', (c) => c.json({ repo: REPO, session: bus.session, busy, proposal: !!proposal }));
 app.get('/api/events', (c) => c.json(bus.events));
 app.get('/api/semantic', (c) => c.json(semantic?.status() ?? { state: 'off' }));
