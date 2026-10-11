@@ -11,7 +11,7 @@ export const strongerMark = (a: ProposalMark, b: ProposalMark): ProposalMark => 
 
 export const emptyLeaf = (): LeafActivity => ({
   looked: false, edited: false, added: 0, removed: 0, created: false, unattributed: false, ghostSteps: [], planned: false,
-  unplanned: false, violation: null, cursor: false, symbols: null, audit: 0, proposal: null,
+  unplanned: false, violation: null, cursor: false, symbols: null, audit: 0, proposal: null, touchedDecisions: [],
 });
 
 const normalize = (p: string) => p.replace(/\\/g, '/').split('/').filter((s) => s && s !== '.').join('/');

@@ -20,7 +20,7 @@ export type EventKind =
   // NAVIGATION_PLAN: per-file facts for the context graph, and the living map (§3.1, §4.7).
   | 'facts_changed' | 'facts_resolved' | 'call_added' | 'call_removed'
   | 'drift_detected' | 'map_proposal_resolved' | 'labels_updated'
-  | 'audit_finding' | 'audit_resolved' | 'maintenance_run' | 'journeys_updated';
+  | 'audit_finding' | 'audit_resolved' | 'maintenance_run' | 'journeys_updated' | 'decision_touched';
 
 export type HarnessEvent = {
   id: string;
@@ -62,7 +62,11 @@ export type EventData = {
   edge_added: { edge: ImportEdge; from: string; to: string };
   edge_removed: { edge: ImportEdge; from: string; to: string };
   test_result: { domain: string; passed: number; failed: number };
-  decision_recorded: { id: string; title: string; invariant: string; option: 'A' | 'B'; paths: string[]; alike?: boolean; urn?: string };
+  /**
+   * Re-emitted (merged by id) when Alike confirms (`alike`, `urn`) and when the decision turn ends with what the chosen
+   * option built (`protects`: the files and `path#symbol`s that implement it — beat 4's markers).
+   */
+  decision_recorded: { id: string; title: string; invariant: string; option: 'A' | 'B'; paths: string[]; alike?: boolean; urn?: string; protects?: { paths: string[]; symbols: string[] } };
   turn_ended: { added: number; removed: number; files: string[]; reason: string };
   /** `context`: node ids the user pointed at (shift-click) for this message; shown as chips, sent to Claude resolved. */
   chat: { role: 'user' | 'assistant' | 'system'; text: string; context?: string[] };
@@ -81,6 +85,8 @@ export type EventData = {
   audit_resolved: { id: string; outcome: AuditOutcome };
   maintenance_run: { agent: 'cartographer' | 'auditor'; trigger: string; ms: number; cost: number | null; ok: boolean };
   journeys_updated: { journeys: Journey[] }; // the full current set (replaces)
+  /** A plan step or an edit touches code a standing decision protects (deterministic path/symbol match). */
+  decision_touched: { decision: string; principle: string; paths: string[]; symbols: string[]; source: 'plan' | 'edit'; step?: number };
 };
 
 export const cellKey = (c: Cell) => `${c.domain}/${c.layer}`;
@@ -112,6 +118,8 @@ export type TurnState = {
   firstEditAt: number | null; // event index of first `edited`
   numstat: { added: number; removed: number } | null;
   avoided: { from: string; to: string; decision: string; reason: string }[];
+  /** Protected code this turn's plan or edits touched (beat 4): shown as decision markers and on the approval card. */
+  touched: EventData['decision_touched'][];
   /** Leaf-level activity (for the context graph): path → what happened to that file this turn. */
   paths: Record<string, PathActivity>;
   callsAdded: { from: string; to: string }[];
@@ -168,7 +176,7 @@ function newTurn(id: string, prompt: string, t: number): TurnState {
   return {
     id, prompt, startedAt: t, endedAt: null, steps: [], planned: {}, plannedEdges: {}, planViolations: [], gateBlocks: [], violationsSeen: [],
     looked: {}, edited: {}, tests: {}, unassigned: [], edgesAdded: [], edgesRemoved: [], forks: [], decisions: [],
-    approved: false, firstEditAt: null, numstat: null, paths: {}, callsAdded: [], callsRemoved: [], avoided: [],
+    approved: false, firstEditAt: null, numstat: null, paths: {}, callsAdded: [], callsRemoved: [], avoided: [], touched: [],
   };
 }
 
@@ -266,6 +274,11 @@ export function apply(s: UIState, e: HarnessEvent, index: number): UIState {
       const r = d as EventData['audit_resolved'];
       const f = s.findings[r.id];
       if (f) f.status = r.outcome;
+      break;
+    }
+    case 'decision_touched': {
+      const t = d as EventData['decision_touched'];
+      if (turn && !turn.touched.some((x) => x.decision === t.decision && x.source === t.source && x.step === t.step && x.paths.join() === t.paths.join() && x.symbols.join() === t.symbols.join())) turn.touched.push(t);
       break;
     }
     case 'journeys_updated':

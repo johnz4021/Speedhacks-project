@@ -78,6 +78,7 @@ export type LeafActivity = {
   symbols: SymbolDiff | null; // for files: which symbols the turn changed
   audit: number; // open advisory findings
   proposal: ProposalMark; // pending cartographer proposal touching this leaf
+  touchedDecisions: string[]; // decisions whose protected code this turn's plan/edits touch here (beat 4 markers)
 };
 
 /** Activity rolled up to a visible node: booleans OR, counts sum, severity MAX (never averaged). */
