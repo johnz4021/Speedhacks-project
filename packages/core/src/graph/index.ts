@@ -4,7 +4,7 @@
 // Parity with today's views is defined at "domains expanded one level" (view.expanded = every domain id,
 // lens.kinds = ['imports']): the visible `cell:` nodes equal cellViews and the cross-domain cell→cell edges,
 // grouped by domain pair, equal edgeViews (test/graph-parity.test.ts checks every prefix of the demo log).
-export { buildGraph, graphFacts, graphOf, fileLabel, VENDORS_ID, GROUP_THRESHOLD, EXTERNAL_LAYER } from './build';
+export { buildGraph, graphFacts, graphOf, fileLabel, VENDORS_ID, GROUP_THRESHOLD, EXTERNAL_LAYER, type FetchEdge } from './build';
 export { activityFor, emptyLeaf, strongerMark } from './activity';
 export { project, gridOf, worse, isActive } from './project';
 export { autoExpand, importance } from './expand';

@@ -7,7 +7,7 @@ export const MAX_TRACE_PATHS = 5;
 
 const adjacency = new WeakMap<ContextGraph, Map<string, { to: string; sinkOnly: boolean }[]>>();
 
-/** calls and handles forward, implements from the interface member to each implementation, writes into tables. */
+/** calls, handles and fetches (UI → route) forward, implements from the interface member to each implementation, writes into tables. */
 function adjacencyOf(g: ContextGraph) {
   let adj = adjacency.get(g);
   if (adj) return adj;
@@ -17,7 +17,7 @@ function adjacencyOf(g: ContextGraph) {
     if (!list.some((x) => x.to === b)) list.push({ to: b, sinkOnly });
   };
   for (const e of g.edges) {
-    if (e.kind === 'calls' || e.kind === 'handles') link(e.from, e.to, false);
+    if (e.kind === 'calls' || e.kind === 'handles' || e.kind === 'fetches') link(e.from, e.to, false);
     else if (e.kind === 'implements') link(e.to, e.from, false);
     else if (e.kind === 'writes') link(e.from, e.to, true);
   }
@@ -27,7 +27,7 @@ function adjacencyOf(g: ContextGraph) {
 }
 
 /**
- * BFS over calls ∪ implements ∪ handles (plus writes into a table sink). Default sinks: vendor and table nodes,
+ * BFS over calls ∪ implements ∪ handles ∪ fetches (plus writes into a table sink). Default sinks: vendor and table nodes,
  * and anything inside an `external` cell. Sinks end a chain. Returns at most MAX_TRACE_PATHS shortest chains
  * (one per sink, nearest first, ties by sink id), each starting at `from`. Dispatch through a registry shows up
  * as an interface member followed by an implementation (`implements` walked backwards).

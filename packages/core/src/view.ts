@@ -21,3 +21,7 @@ export { diffSymbols } from './facts/diff';
 export * from './journeys';
 // Auditor (N9): finding signatures and dismissal matching.
 export { findingSignature, normalizeFindingText, isDismissed, textSimilarity, type RawFinding, type DismissedFinding } from './audit/findings';
+// Beat 4: what a decision protects, and whether a step or edit touches it.
+export * from './protects';
+// Event-log snapshots (N11): replay from the nearest snapshot.
+export * from './snapshots';

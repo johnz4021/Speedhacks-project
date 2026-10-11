@@ -5,7 +5,7 @@ import type { FileFacts, RouteFact } from '../contracts/facts';
 import type { ContextGraph, GraphEdge } from '../contracts/graph';
 import type { Journey, JourneyStepKind } from '../contracts/cartography';
 import { edgeId } from '../contracts/graph';
-import { EXTERNAL_LAYER } from '../graph/build';
+import { EXTERNAL_LAYER, type FetchEdge } from '../graph/build';
 import { trace } from '../graph/trace';
 import { fnv1a } from '../cartography/util';
 import { matchRoute, type FetchSite } from './fetches';
@@ -38,6 +38,11 @@ export function linkFetches(sites: readonly FetchSite[], facts: Readonly<Record<
   return out;
 }
 
+/** `fetches` edges for `buildGraph`: each fetch site matched to a route, from the symbol (or file) that fetches. */
+export function fetchEdges(sites: readonly FetchSite[], facts: Readonly<Record<string, FileFacts>>): FetchEdge[] {
+  return linkFetches(sites, facts).map((l) => ({ from: l.site.from, route: l.route.id, file: l.site.file, confidence: l.confidence }));
+}
+
 /**
  * Sinks a flow ends at: tables, vendor packages claimed by an `external` cell, and code inside `external` cells. Bare
  * packages nobody claimed (react, node builtins) are plumbing, not destinations; they count only when the map claims
@@ -61,8 +66,8 @@ const MAX_DEEP_SINKS = 50;
  *   the fetch site (`page`), the site (`fetch`), then the route. Only the first site (syntactic before inferred, then by id)
  *   is drawn; a route nobody fetches starts at the route.
  * - Other entries start at the entry, then its symbol (or file).
- * - Paths come from core `trace` over calls ∪ handles ∪ implements, plus the fetch → route links and `inferred` dispatch
- *   edges (see dispatch.ts), on a copy of the graph: the nearest sinks, plus each outside service traced on its own.
+ * - Paths come from core `trace` over calls ∪ handles ∪ implements ∪ fetches (the graph's `fetches` edges; links the
+ *   graph wasn't built with join as `fetches` edges), plus `inferred` dispatch edges (see dispatch.ts), on a copy of the graph: the nearest sinks, plus each outside service traced on its own.
  * - The main path is the best one by: most domains crossed, then ending at an outside service rather than a table, then
  *   length. When the flow reaches a dispatch hub (an interface member with several implementations, e.g. a tool
  *   registry's `Tool.run`), the main path goes through the hub and its best implementation, and every other
@@ -74,9 +79,12 @@ const MAX_DEEP_SINKS = 50;
 export function computeJourneys(graph: ContextGraph, facts: Readonly<Record<string, FileFacts>>, sites: readonly FetchSite[] = [], inferred: readonly InferredEdge[] = []): Journey[] {
   const links = linkFetches(sites, facts).filter((l) => graph.nodes[l.site.from] && graph.nodes[l.route.id]);
   const known = (e: { from: string; to: string }) => !!graph.nodes[e.from] && !!graph.nodes[e.to];
-  // Fetch links ride along as `handles` edges so `trace` walks them; inferred dispatch as calls/implements. Never shown.
+  // Fetch links the graph wasn't built with join as `fetches` edges (trace walks them); inferred dispatch as
+  // calls/implements. Never shown.
+  const have = new Set(graph.edges.filter((e) => e.kind === 'fetches').map((e) => e.id));
   const extra: GraphEdge[] = [
-    ...links.map((l): GraphEdge => ({ id: edgeId('fetches', l.site.from, l.route.id), kind: 'handles', from: l.site.from, to: l.route.id, count: 1, owner: l.site.file })),
+    ...links.filter((l) => !have.has(edgeId('fetches', l.site.from, l.route.id)))
+      .map((l): GraphEdge => ({ id: edgeId('fetches', l.site.from, l.route.id), kind: 'fetches', from: l.site.from, to: l.route.id, count: 1, owner: l.site.file })),
     ...inferred.filter(known).map((e): GraphEdge => ({ id: edgeId(e.kind, e.from, e.to), kind: e.kind, from: e.from, to: e.to, count: 1, owner: '', confidence: 'dispatch' })),
   ];
   const g: ContextGraph = extra.length ? { ...graph, edges: [...graph.edges, ...extra] } : graph;
@@ -93,7 +101,7 @@ export function computeJourneys(graph: ContextGraph, facts: Readonly<Record<stri
       if (!conf.has(key(e.from, e.to))) conf.set(key(e.from, e.to), e.confidence ?? 'syntactic');
       (callers.get(e.to) ?? callers.set(e.to, []).get(e.to)!).push(e.from);
       (callees.get(e.from) ?? callees.set(e.from, []).get(e.from)!).push(e.to);
-    } else if (e.kind === 'handles') conf.set(key(e.from, e.to), 'syntactic');
+    } else if (e.kind === 'handles' || e.kind === 'fetches') conf.set(key(e.from, e.to), 'syntactic');
     else if (e.kind === 'implements') {
       conf.set(key(e.to, e.from), 'dispatch');
       (impls.get(e.to) ?? impls.set(e.to, []).get(e.to)!).push(e.from);

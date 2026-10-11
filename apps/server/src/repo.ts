@@ -4,14 +4,14 @@ import { watch, type FSWatcher } from 'chokidar';
 import { diffLines } from 'diff';
 import {
   parseDomainMap, createMapper, listRepoFiles, scanRepoFacts, factsForSource, domainEdges, check, fileExistsIn, createFactsIndex,
-  settleCalls, diffSymbols, moduleRecord,
-  type CallFact, type DomainMap, type Facts, type FileFacts, type ImportEdge, type Violation, type Placement, type SymbolDiff,
+  settleCalls, diffSymbols, moduleRecord, treeSitterLang,
+  type CallFact, type DomainMap, type Facts, type FileFacts, type ImportEdge, type Violation, type Placement, type SymbolDiff, type SymbolFact,
 } from '@harness/core';
 import type { Bus } from './bus';
 
-const CODE = /\.(ts|tsx|js|jsx|mjs|cjs|mts)$/;
+const CODE = /\.(ts|tsx|js|jsx|mjs|cjs|mts|py|go)$/; // .py/.go: Tier 1 via tree-sitter (N11)
 /** Files that change how imports resolve or what the entries are: a change rescans facts (domains.yaml reloads the map). */
-const CONFIG = /(^|\/)(package\.json|tsconfig[^/]*\.json|jsconfig\.json|pnpm-workspace\.yaml)$/;
+const CONFIG = /(^|\/)(package\.json|tsconfig[^/]*\.json|jsconfig\.json|pnpm-workspace\.yaml|go\.mod)$/;
 export const isConfigFile = (rel: string) => rel === 'domains.yaml' || CONFIG.test(rel);
 /** Importers re-linked after one file's exports or symbols change (re-exports are followed up to 4 barrels deep). */
 export const MAX_RELINK = 200;
@@ -19,15 +19,43 @@ export const MAX_RELINK = 200;
 const callKey = (c: { from: string; to: string }) => `${c.from}\u0000${c.to}`;
 /** Export names, re-export targets and `export *` of a module record: what importers link through. */
 const exportShape = (path: string, text: string | null | undefined) => {
-  if (text == null) return '';
+  if (text == null || treeSitterLang(path)) return ''; // Python/Go: symbol names alone drive relinking
   const r = moduleRecord(path, text);
   return JSON.stringify([[...r.exports].sort(([a], [b]) => (a < b ? -1 : 1)), r.stars]);
 };
 const isBarrel = (path: string, text: string | null) => {
-  if (text === null) return false;
+  if (text === null || treeSitterLang(path)) return false;
   const r = moduleRecord(path, text);
   return r.stars.length > 0 || [...r.exports.values()].some((t) => 'spec' in t);
 };
+
+/** A changed line that can't change behavior: blank, a comment, or an import. */
+const INERT = /^\s*(?:$|\/\/|\/\*|\*|import\s|export\s+(?:type\s+)?\{[^}]*\}\s+from\s)/;
+
+/**
+ * Whether a line diff changed code outside every symbol (module-level consts like `PHONE_PATTERN = /…/` that Tier 1
+ * doesn't list as symbols, top-level statements): such a change can alter what the file's symbols do, so protected
+ * symbols there count as touched. Removed lines are placed against the old symbols' spans, added lines against the new.
+ */
+export function changedOutsideSymbols(parts: readonly { value: string; added?: boolean; removed?: boolean }[], before: readonly SymbolFact[], after: readonly SymbolFact[]): boolean {
+  const inside = (symbols: readonly SymbolFact[], at: number) => symbols.some((s) => s.kind !== 'type' && s.span.start <= at && at < s.span.end);
+  let oldAt = 0;
+  let newAt = 0;
+  for (const part of parts) {
+    const symbols = part.removed ? before : after;
+    let at = part.removed ? oldAt : newAt;
+    if (part.added || part.removed) {
+      for (const line of part.value.split('\n')) {
+        const lead = line.length - line.trimStart().length;
+        if (!INERT.test(line) && !inside(symbols, at + lead)) return true;
+        at += line.length + 1;
+      }
+    }
+    if (!part.added) oldAt += part.value.length;
+    if (!part.removed) newAt += part.value.length;
+  }
+  return false;
+}
 
 export class Repo {
   readonly root: string;
@@ -246,20 +274,22 @@ export class Repo {
 
   /**
    * A file changed on disk: emit `edited` (+/− lines) and edge events from its import diff, and update facts.
-   * Called by the PostToolUse hook (attributed) and the watcher (unattributed). No-op if the content is unchanged.
+   * Called by the PostToolUse hook (attributed) and the watcher (unattributed). No-op (null) if the content is unchanged.
+   * Returns what changed: lines and, for code, which symbols (the hook checks it against protected code).
    */
-  fileChanged(path: string, attr: { tool?: string; unattributed?: boolean }) {
-    if (this.mapper.isIgnored(path)) return;
+  fileChanged(path: string, attr: { tool?: string; unattributed?: boolean }): { added: number; removed: number; symbols: SymbolDiff | null; outside: boolean } | null {
+    if (this.mapper.isIgnored(path)) return null;
     const abs = join(this.root, path);
     const deleted = !existsSync(abs);
     const next = deleted ? '' : readFileSync(abs, 'utf8');
     const prev = this.contents.get(path);
     const known = this.facts.files.includes(path);
-    if (prev === next && known) return;
+    if (prev === next && known) return null;
     if (!attr.unattributed) { clearTimeout(this.pending.get(path)); this.pending.delete(path); }
 
     let added = 0, removed = 0;
-    for (const part of diffLines(prev ?? '', next)) {
+    const parts = diffLines(prev ?? '', next);
+    for (const part of parts) {
       if (part.added) added += part.count ?? 0;
       else if (part.removed) removed += part.count ?? 0;
     }
@@ -309,6 +339,8 @@ export class Repo {
 
     // Exports or symbol names moved: importers that linked through this file re-link (barrels included).
     if (tier1 && shapeChanged) this.relink(path);
+    const outside = !!tier1 && !deleted && !created && changedOutsideSymbols(parts, tier1.prev?.symbols ?? [], tier1.next?.symbols ?? []);
+    return { added, removed, symbols: symbols ?? null, outside };
   }
 
   /** Completeness: any write that no hook reported (e.g. from Bash) becomes an unattributed `edited` event. */

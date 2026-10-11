@@ -13,6 +13,8 @@ import { attachLivingMap, livingMapRoutes, onboardingSkeleton, proposeOnboarding
 import { attachSemantic } from './semantic'; // Tier 2 semantic facts (NAVIGATION_PLAN §3.1)
 import { attachAuditor, auditorRoutes } from './auditor'; // auditor (N9)
 import { attachJourneys, journeyRoutes } from './journeys'; // journeys (N10)
+import { attachSnapshots, snapshotRoutes } from './snapshots'; // event-log snapshots (N11)
+import { initTreeSitter } from '@harness/core'; // Python and Go Tier 1 facts (N11)
 
 const here = dirname(fileURLToPath(import.meta.url));
 const REPO = process.env.HARNESS_REPO ? resolve(process.env.INIT_CWD ?? process.cwd(), process.env.HARNESS_REPO) : '';
@@ -30,6 +32,8 @@ const broadcast = (msg: unknown) => {
   for (const ws of sockets) if (ws.readyState === ws.OPEN) ws.send(s);
 };
 bus.on((event) => broadcast({ type: 'event', event }));
+// ---- snapshots (N11): the running UI state, saved every 500 events under .harness/snapshots/ ----
+const snapshots = attachSnapshots(bus, REPO);
 
 const repo = new Repo(REPO, bus);
 // Tier 2 runs in a child process fed by repo_scanned / facts_changed; its status is ephemeral (not in the log).
@@ -53,6 +57,8 @@ function startSession() {
  * candidates (HARNESS_CARTOGRAPHER=0, or a failed/empty run: the reference map), and wait for Confirm.
  */
 async function load() {
+  // Python and Go facts need the tree-sitter wasm loaded once, before the first scan (N11). Without it they have none.
+  await initTreeSitter().catch((e) => console.log(`Tree-sitter unavailable; Python and Go files get no facts: ${(e as Error).message}`));
   if (repo.hasMap()) {
     repo.loadMapFile();
     bus.emit('map_confirmed', { map: repo.map, source: 'file' }, { turn: null });
@@ -104,6 +110,7 @@ const auditorLoop = attachAuditor({ bus, repo });
 app.route('/api', auditorRoutes(auditorLoop));
 const journeysLoop = attachJourneys({ bus, repo });
 app.route('/api', journeyRoutes(journeysLoop));
+app.route('/api', snapshotRoutes(snapshots));
 // ---- end auditor + journeys ----
 app.get('/api/info', (c) => c.json({ repo: REPO, session: bus.session, busy, proposal: !!proposal }));
 app.get('/api/events', (c) => c.json(bus.events));

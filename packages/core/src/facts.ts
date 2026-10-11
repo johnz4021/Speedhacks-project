@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import type { FileFacts } from './contracts/facts';
-import { attachResolver, carryResolver } from './facts/context';
+import { attachResolver, attachRoot, carryResolver, rootOf } from './facts/context';
+import { diskLangContext, extractTreeSitter, treeSitterLang, treeSitterReady } from './facts/treesitter';
 import { settleCalls, extract, type ExtractContext, type PackageEntry } from './facts/extract';
 import { moduleRecord, type ModuleRecord } from './facts/record';
 import { createRepoResolver } from './facts/resolver';
@@ -25,6 +26,9 @@ export function isCodeFile(path: string): boolean {
   return CODE_EXTENSIONS.some((ext) => path.endsWith(ext));
 }
 
+/** A Python or Go file, once tree-sitter is loaded (`initTreeSitter`); before that they carry no facts. */
+export const isTreeSitterFile = (path: string) => treeSitterLang(path) !== null && treeSitterReady();
+
 /**
  * File-existence check against a repo root, cached. Call `clear()` after files are created or deleted.
  * It carries the repo's module resolver (tsconfig paths, package exports, workspaces) for `resolveImport`.
@@ -45,6 +49,7 @@ export function fileExistsIn(root: string): Exists & { clear(): void } {
     return hit;
   };
   attachResolver(exists, () => (resolver ??= createRepoResolver(root)));
+  attachRoot(exists, root);
   return Object.assign(exists, {
     clear: () => {
       cache.clear();
@@ -82,7 +87,7 @@ export function scanRepo(root: string, map: DomainMap): Facts {
   const imports: ImportEdge[] = [];
   const writes: WriteFact[] = [];
   for (const file of files) {
-    if (!isCodeFile(file)) continue;
+    if (!isCodeFile(file) && !isTreeSitterFile(file)) continue;
     const delta = factsForSource(file, fs.readFileSync(`${root}/${file}`, 'utf8'), exists);
     imports.push(...delta.imports);
     writes.push(...delta.writes);
@@ -120,8 +125,31 @@ export function factsForSource(path: string, source: string, exists: Exists): Fa
  */
 export function deltaForEdit(path: string, oldSource: string | null, newSource: string, exists: Exists): FactDelta {
   const file = normalizePath(path) ?? path;
+  if (isTreeSitterFile(file)) return treeSitterDelta(file, oldSource, newSource, exists);
   const before = oldSource === null ? null : counts(file, moduleRecord(file, oldSource), exists);
   const after = counts(file, moduleRecord(file, newSource), exists);
+  const added = (key: string, n: number, old: Map<string, number> | undefined) => n > (old?.get(key) ?? 0);
+  return {
+    imports: [...after.imports].filter(([to, n]) => added(to, n, before?.imports)).map(([to]) => ({ from: file, to })),
+    writes: [...after.writes].filter(([t, n]) => added(t, n, before?.writes)).map(([table]) => ({ file, table })),
+  };
+}
+
+/** The gate's facts for Python and Go: the extractor's repo imports and table writes, multiset-diffed like `deltaForEdit`. */
+function treeSitterDelta(file: string, oldSource: string | null, newSource: string, exists: Exists): FactDelta {
+  const root = rootOf(exists);
+  const ctx = root ? diskLangContext(root, exists) : { exists };
+  const count = (source: string | null) => {
+    if (source === null) return null;
+    const f = extractTreeSitter(file, source, ctx).facts;
+    const imports = new Map<string, number>();
+    for (const i of f.imports) if (!i.to.startsWith('vendor:')) imports.set(i.to, 1);
+    const writes = new Map<string, number>();
+    for (const w of f.writes) writes.set(w.table, 1);
+    return { imports, writes };
+  };
+  const before = count(oldSource);
+  const after = count(newSource)!;
   const added = (key: string, n: number, old: Map<string, number> | undefined) => n > (old?.get(key) ?? 0);
   return {
     imports: [...after.imports].filter(([to, n]) => added(to, n, before?.imports)).map(([to]) => ({ from: file, to })),
@@ -160,6 +188,7 @@ export function createFactsIndex(root: string, map: DomainMap, exists: Exists, r
   const resolve = (from: string, spec: string) => resolveSpecifier(from, spec, exists);
   let entries: Map<string, PackageEntry[]> | null = null;
   const routes = map.cartography?.routes ?? [];
+  const lang = { ...diskLangContext(root, exists), read: (p: string) => read(p) };
   const ctx = (path: string): ExtractContext => ({
     recordOf: (file) => {
       if (!isCodeFile(file)) return null;
@@ -168,6 +197,7 @@ export function createFactsIndex(root: string, map: DomainMap, exists: Exists, r
     },
     entries: (entries ??= packageEntries(root, exists)).get(path) ?? [],
     routes,
+    lang,
   });
   return {
     resolve,
@@ -211,7 +241,7 @@ export function scanRepoFacts(root: string, map: DomainMap): Facts & { fileFacts
       fileFacts[file] = index.extract(file, read(file)!).facts; // schema tables, no imports
       continue;
     }
-    if (!isCodeFile(file)) continue;
+    if (!isCodeFile(file) && !isTreeSitterFile(file)) continue;
     const source = read(file)!;
     fileFacts[file] = index.extract(file, source).facts; // first: it leaves the record cached for the gate facts
     const delta = factsForSource(file, source, exists);

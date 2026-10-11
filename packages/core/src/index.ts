@@ -34,3 +34,9 @@ export { findReads, parseSqlTables, sqlFacts } from './facts/tables';
 // Auditor (N9) and journeys (N10): pure helpers; the model calls live in the server.
 export * from './audit';
 export * from './journeys';
+// Beat 4: decisions protect the code that implements them (pure).
+export * from './protects';
+// Event-log snapshots (N11): reduceFrom(snapshot, events) equals reduce(events) (pure).
+export * from './snapshots';
+// Tier 1 for Python and Go (N11): web-tree-sitter, loaded once with initTreeSitter (node-only).
+export { initTreeSitter, treeSitterReady, treeSitterLang, extractTreeSitter, diskLangContext, type LangContext, type TreeSitterLang } from './facts/treesitter';
