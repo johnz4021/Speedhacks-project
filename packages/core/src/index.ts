@@ -21,3 +21,6 @@ export { createRepoResolver, packageName, workspaceDirs } from './facts/resolver
 export { packageEntries } from './facts/entries';
 export { normalizeRoutePath } from './facts/routes';
 export { hashText } from './facts/hash';
+// Auditor (N9) and journeys (N10): pure helpers; the model calls live in the server.
+export * from './audit';
+export * from './journeys';
