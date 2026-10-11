@@ -5,7 +5,7 @@ These files are the shared interfaces. Lanes build against them in parallel. Cha
 | File | Defines |
 | --- | --- |
 | `facts.ts` | `FileFacts` (Tier 1, per file), `SemanticFacts` (Tier 2), `SymbolFact`, `CallFact`, `RouteFact`, `EntryFact`, `SymbolDiff` |
-| `graph.ts` | `ContextGraph`, `GraphNode`, `GraphEdge`, `ViewState`, `LeafActivity`, `Rollup`, `Projection`, plus id helpers |
+| `graph.ts` | `ContextGraph`, `GraphNode`, `GraphEdge`, `ViewState`, `LeafActivity`, `Rollup` (with `rules`, `plannedNew`), `Projection` (nodes with `preview`, edges, ports with `peer`, `cursor`, `grid`), plus id helpers |
 | `cartography.ts` | `DriftSignal`, `HistoryTurn`, `MapScore`, `MapProposal`, `ProposalChange`, `Label`, `AuditFinding`, `DEFAULT_THRESHOLDS` |
 | `api.ts` | The signatures each lane implements (`BuildGraph`, `Project`, `ScoreMap`, `DetectDrift`, …) and `TurnActivity` |
 

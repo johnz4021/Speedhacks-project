@@ -97,7 +97,7 @@ export function buildGraph(
 
   const putFile = (path: string, parent: string) => {
     const p = placement.get(path)!;
-    const n: Omit<GraphNode, 'order'> = { id: path, kind: 'file', parent, label: path.slice(path.lastIndexOf('/') + 1), path };
+    const n: Omit<GraphNode, 'order'> = { id: path, kind: 'file', parent, label: fileLabel(path), path };
     if (p.kind === 'cell' || p.kind === 'test') n.domain = p.domain;
     if (p.kind === 'cell') n.layer = p.layer;
     add(n, KIND_RANK.file!);
@@ -166,6 +166,11 @@ export function buildGraph(
   });
   const ensureTable = (id: string) => nodes[id] ?? add({ id, kind: 'table', parent: ensureTop(UNASSIGNED_ID).id, label: id.slice(6) }, KIND_RANK.table!);
 
+  // ---- table columns, from schema files (`CREATE TABLE`); the table stays under the cell that lists it
+  for (const path of placement.keys()) {
+    for (const t of facts[path]?.tables ?? []) ensureTable(tableId(t.name)).columns = [...t.columns];
+  }
+
   // ---- vendors: claimed by an `external` cell (importing domains first), else the top-level Vendors group
   const callsOf = (path: string, f: FileFacts): CallFact[] => {
     const s = semantic[path];
@@ -228,6 +233,7 @@ export function buildGraph(
     const s = semantic[path];
     if (s && s.hash === f.hash) for (const im of s.implements) edge('implements', resolve(im.from), resolve(im.to), path, 1);
     for (const w of f.writes) edge('writes', w.symbol ? resolve(w.symbol) : path, ensureTable(tableId(w.table)).id, path, 1);
+    for (const r of f.reads ?? []) edge('reads', r.symbol ? resolve(r.symbol) : path, ensureTable(tableId(r.table)).id, path, 1);
     for (const r of f.routes) if (r.handler) edge('handles', r.id, resolve(r.handler), path, 1);
     if (!local.length) continue;
     for (const e of local.sort((a, b) => (a.id < b.id ? -1 : 1))) edges.push(e);
@@ -241,6 +247,13 @@ export function buildGraph(
     for (let i = 0; i < list.length; i++) nodes[list[i]!]!.order = grid ? rank.get(list[i]!)! : i;
   }
   return { root: ROOT_ID, nodes, children, edges };
+}
+
+/** A file's label: its name, with the folder for index files (`vendor/news/index.ts` → `news/index.ts`). */
+export function fileLabel(path: string): string {
+  const parts = path.split('/');
+  const name = parts.pop()!;
+  return /^index\.[cm]?[jt]sx?$/.test(name) && parts.length ? `${parts.pop()}/${name}` : name;
 }
 
 /** Longest common directory of sorted paths (the common prefix of the first and last, cut at a `/`). */

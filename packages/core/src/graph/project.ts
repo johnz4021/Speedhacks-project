@@ -3,10 +3,11 @@ import type { TurnActivity } from '../contracts/api';
 import type { CallConfidence } from '../contracts/facts';
 import {
   NEUTRAL_ID, cellId, fileOf,
-  type ContextGraph, type EdgeKind, type GraphEdge, type Port, type Projection, type Rollup, type ViewState, type VisibleEdge, type VisibleNode, type ViolationState,
+  type ContextGraph, type EdgeKind, type GraphEdge, type NodeKind, type Port, type Projection, type ProjectionGrid, type Rollup, type ViewState,
+  type VisibleEdge, type VisibleNode, type ViolationState,
 } from '../contracts/graph';
 import { strongerMark } from './activity';
-import { byId, pathTo, subtreeCounts } from './util';
+import { byId, subtreeCounts } from './util';
 
 const SEVERITY = { new: 2, existing: 1 } as const;
 /** The worse of two violation states ('new' > 'existing' > null). */
@@ -18,8 +19,12 @@ const weaker = (a: CallConfidence | null, b: CallConfidence | undefined): CallCo
 
 const emptyRollup = (leaves: number): Rollup => ({
   looked: false, edited: false, added: 0, removed: 0, ghostSteps: [], unplanned: false, violation: null,
-  violationFiles: [], newViolationFiles: [], cursor: false, audit: 0, proposal: null, leaves,
+  violationFiles: [], newViolationFiles: [], cursor: false, audit: 0, proposal: null, rules: [], plannedNew: false, leaves,
 });
+
+/** Containers whose collapsed node previews its first children (files and symbols are leaves at this level). */
+const PREVIEWED = new Set<NodeKind>(['domain', 'cell', 'group', 'tests', 'unassigned', 'neutral']);
+const PREVIEW = 4;
 
 /** True when a rollup carries activity from the turn (what the turn lens keeps). */
 export const isActive = (r: Rollup) =>
@@ -33,7 +38,10 @@ export const isActive = (r: Rollup) =>
  * (a cell, or a leaf outside cells) is a ghost only while nothing in it under the node is edited, and an edited
  * unit is unplanned only if nothing in it under the node is planned. Leaf edges map to their nearest visible
  * endpoints and aggregate by (from, to); self-loops and edges touching neutral code or the root are dropped.
- * Ghost (planned) edges aggregate in their own lane. Ports mark where an edge leaves or enters an expanded container.
+ * Ghost (planned or gate-blocked) edges aggregate in their own lane. Edges between two cells of the same domain are
+ * dropped (flow down a column is implied, SPEC §3); file edges inside an expanded domain are drawn. Ports mark where
+ * an edge leaves or enters an expanded container, with the visible node at the other end. Collapsed containers carry
+ * a preview of their first children. `cursor` is the visible node carrying the agent; `grid` the map's cells.
  * `lens.kinds` filters edge kinds (empty = all); `lens.turnOnly` keeps only nodes with turn activity.
  */
 export function project(graph: ContextGraph, view: ViewState, activity: TurnActivity): Projection {
@@ -46,11 +54,14 @@ export function project(graph: ContextGraph, view: ViewState, activity: TurnActi
   const walk = (parent: string, vparent: string | null, depth: number) => {
     for (const id of graph.children[parent] ?? []) {
       const n = graph.nodes[id]!;
-      const expandable = (graph.children[id]?.length ?? 0) > 0;
+      const kids = graph.children[id] ?? [];
+      const expandable = kids.length > 0;
       const isOpen = expandable && expanded.has(id);
+      const preview = !isOpen && PREVIEWED.has(n.kind) ? kids.slice(0, PREVIEW).map((k) => graph.nodes[k]!.label) : [];
       visible.set(id, {
         id, kind: n.kind, parent: vparent, label: n.label, depth, expanded: isOpen, expandable, order: n.order,
         ...(n.domain ? { domain: n.domain } : {}), ...(n.layer ? { layer: n.layer } : {}), ...(n.path ? { path: n.path } : {}),
+        preview,
         rollup: emptyRollup(n.kind === 'file' ? counts(id).symbols : n.kind === 'symbol' ? counts(id).symbols + 1 : counts(id).files),
       });
       order.push(id);
@@ -127,9 +138,16 @@ export function project(graph: ContextGraph, view: ViewState, activity: TurnActi
   for (const f of activity.violations.files) {
     for (let r = rep(f); r; r = visible.get(r)!.parent) visible.get(r)!.rollup.violationFiles.push(f);
   }
+  for (const [id, list] of Object.entries(activity.rules)) {
+    for (let r = rep(id); r; r = visible.get(r)!.parent) visible.get(r)!.rollup.rules.push(...list);
+  }
+  for (const id of activity.plannedNew) {
+    for (let r = rep(id); r; r = visible.get(r)!.parent) visible.get(r)!.rollup.plannedNew = true;
+  }
   for (const v of visible.values()) {
     v.rollup.violationFiles = [...new Set(v.rollup.violationFiles)].sort(byId);
     v.rollup.newViolationFiles = [...new Set(v.rollup.newViolationFiles)].sort(byId);
+    if (v.rollup.rules.length) v.rollup.rules = [...new Set(v.rollup.rules)].sort(byId);
   }
 
   const shown = view.lens.turnOnly ? new Set(order.filter((id) => isActive(visible.get(id)!.rollup))) : null;
@@ -148,12 +166,19 @@ export function project(graph: ContextGraph, view: ViewState, activity: TurnActi
   };
   const added = byFrom(activity.addedEdges);
   const existing = byFrom(activity.violations.edges);
+  /** Flow down a column is implied: no edge between two cells of one domain. */
+  const sameColumn = (a: string, b: string) => {
+    const na = visible.get(a)!;
+    const nb = visible.get(b)!;
+    return na.kind === 'cell' && nb.kind === 'cell' && na.domain === nb.domain;
+  };
   const endpoints = (from: string, to: string): [string, string] | null => {
     const a = end(from);
     if (!a) return null;
     const b = end(to);
     if (!b || a === b) return null;
     if (shown && (!shown.has(a) || !shown.has(b))) return null;
+    if (sameColumn(a, b)) return null;
     return [a, b];
   };
   type Solid = VisibleEdge & { kindSet: Set<EdgeKind> };
@@ -182,11 +207,12 @@ export function project(graph: ContextGraph, view: ViewState, activity: TurnActi
     for (const pe of activity.plannedEdges) {
       const ends = endpoints(pe.from, pe.to);
       if (!ends) continue;
-      const id = `ghost:${ends[0]}->${ends[1]}`;
+      // a ghost a standing decision rules out keeps its own lane ("rejected in DR-4, session 1")
+      const id = `${pe.decision ? 'rejected' : 'ghost'}:${ends[0]}->${ends[1]}`;
       let v = ghosts.get(id);
-      if (!v) ghosts.set(id, (v = { id, from: ends[0], to: ends[1], kinds: ['imports'], count: 0, status: 'ghost', violation: null, confidence: null, steps: [], stepSet: new Set(), leafEdges: [] }));
+      if (!v) ghosts.set(id, (v = { id, from: ends[0], to: ends[1], kinds: ['imports'], count: 0, status: 'ghost', violation: null, confidence: null, steps: [], stepSet: new Set(), leafEdges: [], decision: pe.decision ?? null }));
       v.count += 1;
-      v.leafEdges.push(`plan|${pe.from}|${pe.to}`);
+      v.leafEdges.push(`${pe.source ?? (pe.steps.length ? 'plan' : 'gate')}|${pe.from}|${pe.to}`);
       v.violation = worse(v.violation, pe.violation);
       for (const s of pe.steps) v.stepSet.add(s);
     }
@@ -208,25 +234,35 @@ export function project(graph: ContextGraph, view: ViewState, activity: TurnActi
     const ta = ancestors(e.to);
     const ts = new Set(ta);
     const fs = new Set(fa);
-    for (const c of fa) if (!ts.has(c)) ports.push({ container: c, edge: e.id, side: side(graph, c, e.to), direction: 'out' });
-    for (const c of ta) if (!fs.has(c)) ports.push({ container: c, edge: e.id, side: side(graph, c, e.from), direction: 'in' });
+    for (const c of fa) if (!ts.has(c)) ports.push({ container: c, edge: e.id, peer: e.to, direction: 'out' });
+    for (const c of ta) if (!fs.has(c)) ports.push({ container: c, edge: e.id, peer: e.from, direction: 'in' });
   }
-  return { nodes, edges, ports };
+
+  const cur = activity.cursor ? rep(activity.cursor) : null;
+  const cursor = cur && (!shown || shown.has(cur)) ? { node: cur, leaf: activity.cursor!, verb: activity.verb ?? 'reading' } : null;
+  return { nodes, edges, ports, cursor, grid: gridOf(graph) };
 }
 
-/**
- * Which side of container `c` faces node `x`, from grid position: where their ancestor chains diverge, siblings
- * under a domain are rows (cells in layer order, tests last) → top/bottom; anywhere else (domain columns in map
- * order, or children inside a cell) → left/right by sibling order.
- */
-export function side(graph: ContextGraph, c: string, x: string): Port['side'] {
-  const pc = pathTo(graph, c);
-  const px = pathTo(graph, x);
-  let i = 0;
-  while (i < pc.length && i < px.length && pc[i] === px[i]) i++;
-  const a = pc[i];
-  const b = px[i];
-  if (!a || !b) return 'right'; // one contains the other: not a crossing
-  const after = graph.nodes[b]!.order > graph.nodes[a]!.order;
-  return graph.nodes[pc[i - 1]!]!.kind === 'domain' ? (after ? 'bottom' : 'top') : after ? 'right' : 'left';
+const grids = new WeakMap<ContextGraph, ProjectionGrid>();
+/** Domains in map order, layers in map order (those with at least one cell), and the cell ids that exist. */
+export function gridOf(graph: ContextGraph): ProjectionGrid {
+  let g = grids.get(graph);
+  if (g) return g;
+  const domains: string[] = [];
+  const layers = new Map<string, number>();
+  const cells: string[] = [];
+  for (const id of graph.children[graph.root] ?? []) {
+    const d = graph.nodes[id]!;
+    if (d.kind !== 'domain') continue;
+    domains.push(d.domain!);
+    for (const c of graph.children[id] ?? []) {
+      const n = graph.nodes[c]!;
+      if (n.kind !== 'cell') continue;
+      cells.push(c);
+      layers.set(n.layer!, n.order);
+    }
+  }
+  g = { domains, layers: [...layers].sort((a, b) => a[1] - b[1]).map(([l]) => l), cells };
+  grids.set(graph, g);
+  return g;
 }

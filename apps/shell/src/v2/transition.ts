@@ -3,7 +3,7 @@
 //   150–450 ms one commit, then FLIP the moved nodes with the Web Animations API; the camera flies in parallel
 //   450–650 ms new nodes fade in and changed edges draw in (CSS, keyed on the commit)
 // A new request at any point cancels the pending stage and starts from what is on screen.
-import type { Frame } from './layout/grid';
+import type { Frame } from './layout/frame';
 
 export const reducedMotion = () => typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -13,7 +13,8 @@ export const T_ENTER = 200;
 const EASE = 'cubic-bezier(0.25, 0.8, 0.3, 1)';
 const FADE_ID = 'v2-fade';
 
-export type Enter = { nodes: Set<string>; edges: Set<string>; seq: number };
+/** What enters with a commit: new nodes, changed edges, and edges that just became new (one pulse each, never looping). */
+export type Enter = { nodes: Set<string>; edges: Set<string>; pulse: Set<string>; seq: number };
 export type TransitionStats = { commitMs: number; commitToFrameMs: number; moved: number; entered: number; removed: number; animated: boolean };
 
 export type TransitionHooks = {
@@ -39,6 +40,7 @@ export class Transitioner {
     this.timers = [];
     const root = this.hooks.root();
     if (!root) return;
+    root.classList.remove('is-moving');
     for (const a of root.getAnimations({ subtree: true })) {
       if (a.id === FADE_ID) a.cancel();
       else if (a instanceof CSSAnimation || a instanceof CSSTransition) continue;
@@ -55,11 +57,18 @@ export class Transitioner {
     const nextEdges = new Map(next.edges.map((e) => [e.id, e.d]));
     const changedEdges = [...prevEdges].filter(([id, d]) => nextEdges.get(id) !== d).map(([id]) => id);
     const removed = prev ? prev.nodes.filter((n) => !next.boxes[n.id]).map((n) => n.id) : [];
+    const prevStatus = new Map(prev?.edges.map((e) => [e.id, e.status]) ?? []);
     const enter: Enter = {
       nodes: new Set(prev ? next.nodes.filter((n) => !prev.boxes[n.id]).map((n) => n.id) : []),
       edges: new Set(prev ? next.edges.filter((e) => prevEdges.get(e.id) !== e.d).map((e) => e.id) : []),
+      pulse: new Set(prev ? next.edges.filter((e) => e.status === 'new' && prevStatus.get(e.id) !== 'new').map((e) => e.id) : []),
       seq: ++this.seq,
     };
+    // Strata's depth fade, for transitions only: while the view changes, everything outside the focus recedes.
+    if (animate && root && prev && prev.key !== next.key) {
+      root.classList.add('is-moving');
+      this.timers.push(window.setTimeout(() => root.classList.remove('is-moving'), T_FADE + T_MOVE + T_ENTER));
+    }
 
     if (animate && root) {
       for (const id of changedEdges) root.querySelector(sel('data-edge', id))?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: T_FADE, fill: 'forwards', easing: 'ease-out', id: FADE_ID });

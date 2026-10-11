@@ -1,13 +1,18 @@
-// Custom React Flow nodes. Each is memoized and reads only its own slice of the projection from the v2 store,
-// plus the zoom bucket, so a zoom re-renders a node only when its level of detail changes.
+// Custom React Flow nodes. Each is memoized and reads only its own slice of the projection from the v2 store, plus
+// the zoom bucket, so a zoom re-renders a node only when its level of detail changes.
 import { memo } from 'react';
 import { useStore as useFlow, type NodeProps } from '@xyflow/react';
 import type { Rollup, VisibleNode } from '@harness/core/view';
+import { useTween } from '../hooks';
+import { useStore } from '../store';
+import { selectedNode } from './select';
 import { useV2 } from './store';
 
 export type Lod = 'far' | 'mid' | 'near';
-export const lodOf = (zoom: number): Lod => (zoom < 0.4 ? 'far' : zoom < 0.72 ? 'mid' : 'near');
+export const lodOf = (zoom: number): Lod => (zoom < 0.36 ? 'far' : zoom < 0.72 ? 'mid' : 'near');
 export const useLod = () => useFlow((s) => lodOf(s.transform[2]));
+
+const base = (p: string) => p.split('/').pop() ?? p;
 
 function stateClasses(r: Rollup, ghost: boolean) {
   const c: string[] = [];
@@ -20,6 +25,12 @@ function stateClasses(r: Rollup, ghost: boolean) {
   return c.join(' ');
 }
 
+function useMarks(id: string) {
+  const focus = useV2((s) => s.focus === id);
+  const selected = useStore((s) => selectedNode(s.selection) === id);
+  return `${focus ? 'is-focus' : ''} ${selected ? 'is-selected' : ''}`;
+}
+
 function Steps({ steps }: { steps: number[] }) {
   if (!steps.length) return null;
   return (
@@ -29,25 +40,35 @@ function Steps({ steps }: { steps: number[] }) {
   );
 }
 
+/** +/− badge, ticking up as edits land. */
 function Diff({ r }: { r: Rollup }) {
+  const added = useTween(r.added);
+  const removed = useTween(r.removed);
   if (!r.edited) return null;
   return (
     <span className="v2-diff">
-      <span className="plus">+{r.added}</span>
-      <span className="minus">−{r.removed}</span>
+      <span className="plus">+{added}</span>
+      <span className="minus">−{removed}</span>
     </span>
   );
 }
 
-/** Which rule a node crosses, and whether the crossing is new this turn. */
-function ViolationMark({ id, r }: { id: string; r: Rollup }) {
-  const rules = useV2((s) => s.rules[id]);
+/** Existing crossings: a ring badge with the rule ids and file count. New crossings: a solid badge naming the file. */
+function Violations({ r, compact = false }: { r: Rollup; compact?: boolean }) {
   if (!r.violation) return null;
-  const files = [...r.newViolationFiles, ...r.violationFiles].join('\n');
+  const existing = r.violationFiles.filter((f) => !r.newViolationFiles.includes(f));
   return (
-    <span className={`v2-vmark ${r.violation === 'new' ? 'is-new' : ''}`} title={files}>
-      {r.violation === 'new' && <b>new</b>}
-      {(rules ?? []).join(' ')}
+    <span className="v2-vmarks">
+      {r.newViolationFiles.length > 0 && (
+        <span className="v2-vmark is-new" title={r.newViolationFiles.join('\n')}>
+          <b>new</b>{!compact && <> {r.newViolationFiles.map(base).join(', ')}</>}
+        </span>
+      )}
+      {(existing.length > 0 || (!r.newViolationFiles.length && r.rules.length > 0)) && (
+        <span className="v2-vmark" title={[...r.rules, ...existing].join('\n')}>
+          {compact ? existing.length || r.rules.length : `${r.rules.join(' ')}${existing.length > 1 ? ` · ${existing.length}` : ''}`}
+        </span>
+      )}
     </span>
   );
 }
@@ -57,20 +78,22 @@ const useNode = (id: string) => useV2((s) => s.nodes[id]) as VisibleNode | undef
 export const FileNode = memo(function FileNode({ id }: NodeProps) {
   const n = useNode(id);
   const lod = useLod();
-  const isNew = useV2((s) => !!s.planned[id]);
+  const marks = useMarks(id);
+  const syms = useV2((s) => s.symbols[id] ?? 0);
   if (!n) return null;
   const r = n.rollup;
   const ghost = r.ghostSteps.length > 0;
   return (
-    <div className={`v2-file ${stateClasses(r, ghost)} ${isNew ? 'is-planned-new' : ''} lod-${lod}`}>
+    <div className={`v2-file ${stateClasses(r, ghost)} ${r.plannedNew ? 'is-planned-new' : ''} lod-${lod} ${marks}`} title={n.path ?? n.id}>
       {lod !== 'far' && <span className="v2-file-name">{n.label}</span>}
       {lod !== 'far' && (
         <span className="v2-file-meta">
+          {syms > 0 && <span className="v2-syms" title={`${syms} symbol${syms === 1 ? '' : 's'} changed`}>ƒ{syms}</span>}
           <Diff r={r} />
-          <Steps steps={r.ghostSteps} />
         </span>
       )}
-      {lod !== 'far' && <ViolationMark id={id} r={r} />}
+      <Steps steps={r.ghostSteps} />
+      {lod !== 'far' && <Violations r={r} />}
     </div>
   );
 });
@@ -78,21 +101,24 @@ export const FileNode = memo(function FileNode({ id }: NodeProps) {
 export const CellNode = memo(function CellNode({ id }: NodeProps) {
   const n = useNode(id);
   const lod = useLod();
-  const preview = useV2((s) => s.preview[id]);
+  const marks = useMarks(id);
+  const hot = useV2((s) => s.hot[id]);
   if (!n) return null;
   const r = n.rollup;
   const ghost = r.ghostSteps.length > 0 && !r.edited;
-  const names = preview ?? [];
-  const shown = names.slice(0, 4);
+  const names = hot ?? n.preview;
+  const room = lod === 'near' ? 4 : 2;
+  const shown = names.slice(0, room);
+  const more = r.leaves - shown.length;
   return (
-    <div className={`v2-cell ${stateClasses(r, ghost)} lod-${lod}`}>
+    <div className={`v2-cell ${stateClasses(r, ghost)} lod-${lod} ${marks}`}>
       {lod === 'far' ? (
         <span className="v2-cell-count is-big">{r.leaves}</span>
       ) : (
         <>
           <span className="v2-cell-files">
-            {(lod === 'near' ? shown : shown.slice(0, 2)).map((f) => <span key={f} className="v2-cell-file">{f}</span>)}
-            {names.length > (lod === 'near' ? 4 : 2) && <span className="v2-cell-more">+{names.length - (lod === 'near' ? 4 : 2)} more</span>}
+            {shown.map((f, i) => <span key={`${f}${i}`} className="v2-cell-file">{f.replace(/\.[cm]?[jt]sx?$/, "")}</span>)}
+            {more > 0 && <span className="v2-cell-more">+{more} more</span>}
           </span>
           <span className="v2-cell-foot">
             <span className="v2-cell-count">{r.leaves} {r.leaves === 1 ? 'file' : 'files'}</span>
@@ -101,7 +127,7 @@ export const CellNode = memo(function CellNode({ id }: NodeProps) {
         </>
       )}
       {ghost && <Steps steps={r.ghostSteps} />}
-      <ViolationMark id={id} r={r} />
+      <Violations r={r} compact={lod === 'far'} />
     </div>
   );
 });
@@ -109,14 +135,15 @@ export const CellNode = memo(function CellNode({ id }: NodeProps) {
 /** A compressed column's cell: no text, only the state it carries (fill, ghost dash, rule marks, count). */
 export const SpineNode = memo(function SpineNode({ id }: NodeProps) {
   const n = useNode(id);
+  const marks = useMarks(id);
   if (!n) return null;
   const r = n.rollup;
   const ghost = r.ghostSteps.length > 0 && !r.edited;
   return (
-    <div className={`v2-spine ${stateClasses(r, ghost)}`} title={`${n.label}: ${r.leaves} files`}>
+    <div className={`v2-spine ${stateClasses(r, ghost)} ${marks}`} title={`${n.label}: ${r.leaves} files`}>
       <span className="v2-spine-count">{r.leaves}</span>
       {ghost && <Steps steps={r.ghostSteps} />}
-      <ViolationMark id={id} r={r} />
+      <Violations r={r} compact />
     </div>
   );
 });
@@ -124,12 +151,13 @@ export const SpineNode = memo(function SpineNode({ id }: NodeProps) {
 export const ContainerNode = memo(function ContainerNode({ id }: NodeProps) {
   const n = useNode(id);
   const lod = useLod();
+  const marks = useMarks(id);
   if (!n) return null;
   const r = n.rollup;
   return (
-    <div className={`v2-container ${r.violation ? `has-${r.violation}` : ''} ${r.edited ? 'has-edits' : ''} lod-${lod}`}>
+    <div className={`v2-container is-${n.kind} ${r.violation ? `has-${r.violation}` : ''} ${r.edited ? 'has-edits' : ''} lod-${lod} ${marks}`}>
       <span className="v2-container-head">
-        <span className="v2-container-name">{n.label}</span>
+        <span className="v2-container-name">{n.kind === 'group' ? n.label : n.label}</span>
         <span className="v2-container-count">{r.leaves} {r.leaves === 1 ? 'file' : 'files'}</span>
         <Diff r={r} />
       </span>
@@ -137,11 +165,42 @@ export const ContainerNode = memo(function ContainerNode({ id }: NodeProps) {
   );
 });
 
-/** The expanded domain's column: the next step down the depth lightness ramp. */
-export const BandNode = memo(function BandNode({ id }: NodeProps) {
+/** A collapsed directory or component inside an open cell. */
+export const GroupNode = memo(function GroupNode({ id }: NodeProps) {
   const n = useNode(id);
+  const lod = useLod();
+  const marks = useMarks(id);
   if (!n) return null;
-  return <div className="v2-band"><span className="v2-band-name">{n.label}</span></div>;
+  const r = n.rollup;
+  const ghost = r.ghostSteps.length > 0 && !r.edited;
+  return (
+    <div className={`v2-group ${stateClasses(r, ghost)} lod-${lod} ${marks}`} title={n.preview.join(', ')}>
+      {lod !== 'far' && <span className="v2-group-name">{n.label}</span>}
+      {lod !== 'far' && <span className="v2-group-count">{r.leaves} files <Diff r={r} /></span>}
+      {ghost && <Steps steps={r.ghostSteps} />}
+      {lod !== 'far' && <Violations r={r} compact />}
+    </div>
+  );
 });
 
-export const nodeTypes = { file: FileNode, cell: CellNode, spine: SpineNode, container: ContainerNode, band: BandNode };
+/** Tables, vendors and routes inside an open cell. */
+export const ChipNode = memo(function ChipNode({ id }: NodeProps) {
+  const n = useNode(id);
+  const lod = useLod();
+  const marks = useMarks(id);
+  const cols = useV2((s) => s.columns[id]);
+  if (!n) return null;
+  return (
+    <div className={`v2-chip is-${n.kind} ${stateClasses(n.rollup, false)} ${marks}`} title={cols?.join(', ')}>
+      {lod !== 'far' && <><span className="v2-chip-kind">{n.kind}</span><span className="v2-chip-name">{n.label}</span></>}
+      {lod !== 'far' && cols && <span className="v2-chip-cols">{cols.length} columns</span>}
+    </div>
+  );
+});
+
+/** The open column: the next step down the depth lightness ramp. */
+export const BandNode = memo(function BandNode() {
+  return <div className="v2-band" />;
+});
+
+export const nodeTypes = { file: FileNode, cell: CellNode, spine: SpineNode, container: ContainerNode, group: GroupNode, chip: ChipNode, band: BandNode };

@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { Cell, EventData, EventKind, HarnessEvent, Violation } from '@harness/core/view';
+import type { Cell, EventData, EventKind, FileFacts, HarnessEvent, SymbolDiff, SymbolFact, Violation } from '@harness/core/view';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const base = JSON.parse(readFileSync(join(here, 'base-events.json'), 'utf8')) as HarnessEvent[];
@@ -33,6 +33,21 @@ function ev<K extends EventKind>(kind: K, data: K extends keyof EventData ? Even
   });
 }
 
+// Tier 1 facts after an edit (the server emits `facts_changed` with every `edited`): the scanned facts with a new
+// hash, or for a created file the imports and symbols it was written with.
+const scanned = new Map((base.find((e) => e.kind === 'repo_scanned')?.data as EventData['repo_scanned'] | undefined)?.fileFacts?.map((f) => [f.path, f]) ?? []);
+function factsAfter(path: string, created?: { imports: string[]; symbols: string[] }): FileFacts {
+  const prev = scanned.get(path);
+  if (prev && !created) return { ...prev, hash: `${prev.hash}+${n}` };
+  const sym = (name: string, parent: string | null): SymbolFact => ({
+    id: `${path}#${name}`, file: path, name, kind: parent ? 'method' : 'const', exported: !parent, parent: parent && `${path}#${parent}`,
+    span: { start: 0, end: 0 }, sigHash: name, bodyHash: name,
+  });
+  const symbols = (created?.symbols ?? []).map((s) => sym(s, s.includes('.') ? s.slice(0, s.indexOf('.')) : null));
+  return { path, hash: `new${n}`, imports: (created?.imports ?? []).map((to) => ({ to, typeOnly: false })), writes: [], symbols, calls: [], routes: [], entries: [] };
+}
+const symbolsOf = (f: FileFacts, created: boolean): SymbolDiff => ({ added: created ? f.symbols.map((s) => s.id) : [], removed: [], sig: [], body: created ? [] : f.symbols.slice(0, 1).map((s) => s.id), renamed: [] });
+
 const c = (domain: string, layer: string): Cell => ({ domain, layer });
 const TOOLS_LOGIC = c('tools', 'logic');
 const TOOLS_EXT = c('tools', 'external');
@@ -46,14 +61,14 @@ const PROMPT = "Add a tool that summarizes a prospect's latest 10-K.";
 const dr1: Violation = {
   invariant: 'DR-1',
   kind: 'only_via',
-  reason: `${NEW_TOOL} imports vendor/llm-openai/index.ts, but DR-1: Model providers are only called through the model gateway.`,
+  reason: `${NEW_TOOL} imports vendor/llm-anthropic/index.ts, but DR-1: Model providers are only called through the model gateway.`,
   file: NEW_TOOL,
-  detail: `${NEW_TOOL} → vendor/llm-openai/index.ts`,
+  detail: `${NEW_TOOL} → vendor/llm-anthropic/index.ts`,
   options: [
-    'Route it through the Model gateway (every model call, with redaction and cost logging) instead of importing vendor/llm-openai/index.ts directly',
+    'Route it through the Model gateway (every model call, with redaction and cost logging) instead of importing vendor/llm-anthropic/index.ts directly',
     `Add an exception for ${NEW_TOOL} and record why`,
   ],
-  target: 'vendor/llm-openai/index.ts',
+  target: 'vendor/llm-anthropic/index.ts',
 };
 
 // ---------------------------------------------------------------- turn start + exploration
@@ -63,13 +78,13 @@ ev('looked', { tool: 'Read' }, { path: 'src/tools/index.ts', cell: TOOLS_LOGIC, 
 ev('looked', { tool: 'Read' }, { path: 'src/tools/news-summarize.ts', cell: TOOLS_LOGIC });
 ev('cursor', { verb: 'searching' }, { path: 'vendor/sec-edgar', cell: TOOLS_EXT });
 ev('looked', { tool: 'Read' }, { path: 'vendor/sec-edgar/index.ts', cell: TOOLS_EXT });
-ev('looked', { tool: 'Read' }, { path: 'vendor/llm-openai/index.ts', cell: GW_EXT });
-ev('chat', { role: 'assistant', text: "I'll model the new tool on `news-summarize.ts`: fetch the filing from SEC EDGAR, then summarize it with the same OpenAI call." });
+ev('looked', { tool: 'Read' }, { path: 'vendor/llm-anthropic/index.ts', cell: GW_EXT });
+ev('chat', { role: 'assistant', text: "I'll model the new tool on `news-summarize.ts`: fetch the filing from SEC EDGAR, then summarize it with the same Anthropic call." });
 
 // ---------------------------------------------------------------- first plan: copies the bypass
 const steps1 = [
   { n: 1, text: 'Add fetchLatest10K() to the SEC EDGAR client', files: ['vendor/sec-edgar/index.ts'], imports: [] },
-  { n: 2, text: 'Create the filing-summary tool, modeled on news-summarize', files: [NEW_TOOL], imports: [{ from: NEW_TOOL, to: 'vendor/sec-edgar/index.ts' }, { from: NEW_TOOL, to: 'vendor/llm-openai/index.ts' }] },
+  { n: 2, text: 'Create the filing-summary tool, modeled on news-summarize', files: [NEW_TOOL], imports: [{ from: NEW_TOOL, to: 'vendor/sec-edgar/index.ts' }, { from: NEW_TOOL, to: 'vendor/llm-anthropic/index.ts' }] },
   { n: 3, text: 'Register filingSummary in the tool index', files: ['src/tools/index.ts'], imports: [] },
   { n: 4, text: 'Add a test with a recorded filing', files: [NEW_TEST], imports: [] },
 ];
@@ -79,11 +94,11 @@ ev('planned', {
     { domain: 'tools', layer: 'external', steps: [1], files: ['vendor/sec-edgar/index.ts'] },
     { domain: 'tools', layer: 'logic', steps: [2, 3], files: [NEW_TOOL, 'src/tools/index.ts'] },
   ],
-  edges: [{ from: 'tools', to: 'gateway', steps: [2], imports: [{ from: NEW_TOOL, to: 'vendor/llm-openai/index.ts' }] }],
+  edges: [{ from: 'tools', to: 'gateway', steps: [2], imports: [{ from: NEW_TOOL, to: 'vendor/llm-anthropic/index.ts' }] }],
   unassigned: [],
 }, { gap: 2400 });
 ev('plan_violation', { violation: dr1 }, { gap: 40 });
-const ask = 'My plan crosses **DR-1**: `filing-summary.ts` would call OpenAI directly, like `news-summarize.ts` does. Which do you want?\n\n- **A**: route it through `gateway.complete()`, with redaction and cost logging\n- **B**: add an exception for `filing-summary.ts` and record why';
+const ask = 'My plan crosses **DR-1**: `filing-summary.ts` would call Anthropic directly, like `news-summarize.ts` does. Which do you want?\n\n- **A**: route it through `gateway.complete()`, with redaction and cost logging\n- **B**: add an exception for `filing-summary.ts` and record why';
 ev('chat', { role: 'assistant', text: ask }, { gap: 2200 });
 ev('fork_asked', { violations: [dr1], text: ask }, { gap: 30 });
 
@@ -117,13 +132,15 @@ ev('approval_requested', { plan }, { gap: 300 });
 ev('plan_approved', {} as never, { gap: 4200 });
 
 // ---------------------------------------------------------------- build
-function edit(path: string, cell: Cell, added: number, removed: number, created = false, gap = 1400) {
+function edit(path: string, cell: Cell, added: number, removed: number, created?: { imports: string[]; symbols: string[] }, gap = 1400) {
   ev('cursor', { verb: 'editing' }, { path, cell, gap });
   if (created) ev('file_assigned', { placement: { kind: 'cell', domain: cell.domain, layer: cell.layer } }, { path, turn: TURN, gap: 60 });
-  ev('edited', { added, removed, created, tool: created ? 'Write' : 'Edit' }, { path, cell, gap: 300 });
+  const facts = factsAfter(path, created);
+  ev('edited', { added, removed, created: !!created, tool: created ? 'Write' : 'Edit', symbols: symbolsOf(facts, !!created) }, { path, cell, gap: 300 });
+  ev('facts_changed', { facts }, { path, cell, gap: 5 });
 }
 edit('vendor/sec-edgar/index.ts', TOOLS_EXT, 22, 1);
-edit(NEW_TOOL, TOOLS_LOGIC, 64, 0, true);
+edit(NEW_TOOL, TOOLS_LOGIC, 64, 0, { imports: ['vendor/sec-edgar/index.ts', 'src/gateway/complete.ts'], symbols: ['filingSummary', 'filingSummary.run'] });
 ev('edge_added', { edge: { from: NEW_TOOL, to: 'src/gateway/complete.ts' }, from: 'tools', to: 'gateway' }, { gap: 200 });
 edit('src/tools/index.ts', TOOLS_LOGIC, 2, 0);
 edit('src/gateway/redact.ts', GW_LOGIC, 9, 3);
