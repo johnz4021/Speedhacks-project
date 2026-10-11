@@ -5,7 +5,7 @@
 import { execFile } from 'node:child_process';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import type { DomainMap, Invariant } from '@harness/core';
+import { createMapper, type DomainMap, type Invariant } from '@harness/core';
 import { git } from './git';
 
 export type AlikeAnchor =
@@ -58,37 +58,69 @@ export function anchorPath(glob: string): string | null {
   return /[*?[{]/.test(glob) ? null : glob;
 }
 
-/** Folder/file anchors for a domain's cells, logic first (it's where rules usually bite). */
-function domainPaths(map: DomainMap, domainId: string, expand: (glob: string) => string[]): string[] {
+/**
+ * Folder/file anchors for a domain's cells, logic first (it's where rules usually bite). With the repo's `files`, a
+ * cell's plain file paths collapse to their folder when every file under that folder belongs to this domain
+ * (`src/gateway/complete.ts`, `…/redact.ts`, … → `src/gateway/`), so files added there later are covered too.
+ */
+function domainPaths(map: DomainMap, domainId: string, expand: (glob: string) => string[], files?: readonly string[]): string[] {
   const d = map.domains.find((x) => x.id === domainId);
   if (!d) return [];
+  const mapper = files ? createMapper(map) : null;
+  const ownFolder = new Map<string, boolean>();
+  const folderOf = (path: string): string | null => {
+    if (!files || !mapper) return null;
+    const dir = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
+    if (!dir) return null;
+    let own = ownFolder.get(dir);
+    if (own === undefined) {
+      const under = files.filter((f) => f.startsWith(`${dir}/`) && !mapper.isIgnored(f));
+      own = under.length > 0 && under.every((f) => mapper.domainOf(f) === domainId);
+      ownFolder.set(dir, own);
+    }
+    return own ? `${dir}/` : null;
+  };
   const order = (layer: string) => (layer === 'logic' ? 0 : layer === 'data' ? 1 : layer === 'ui' ? 2 : 3);
   const out: string[] = [];
   for (const [, cell] of Object.entries(d.cells).sort(([a], [b]) => order(a) - order(b))) {
     for (const g of cell.paths ?? []) {
       const p = anchorPath(g);
-      out.push(...(p ? [p] : expand(g)));
+      const folder = p && !p.endsWith('/') ? folderOf(p) : null;
+      for (const x of folder ? [folder] : p ? [p] : expand(g)) if (!out.includes(x)) out.push(x);
     }
   }
   return out;
 }
 
 /**
- * The architecture a decision governs, as Alike anchors: for `no_edge`, both domains' cells (the `from` side
- * governs, the `to` side is context); for `only_via`, the guarded targets plus the allowed domains; for
- * `owns_writes`, the owners' data cells. An exception (option B) also anchors the excepted file.
- * `expand` turns a glob Alike can't take (e.g. `vendor/llm-*` + `/**`) into concrete folders.
+ * The architecture a decision governs, as Alike anchors (folders, never globs — Alike matches folder prefixes):
+ * - **the side that asked:** the cells of the violating files' domain(s) (`governs`) — e.g. a DR-1 decision made for a
+ *   new research tool anchors `src/tools/`, so the next tool written there is given the decision;
+ * - **the rule:** for `no_edge`, both domains' cells (the `from` side governs, the `to` side is context); for
+ *   `only_via`, the guarded targets (`governs`) plus the allowed domains (`context`: `src/gateway/` for DR-1); for
+ *   `owns_writes`, the owners' data cells;
+ * - an exception (option B) also anchors the excepted file.
+ * Order is violating side, rule, context; at most MAX_PATH_ANCHORS path anchors, then one `applies_when` situation.
+ * `expand` turns a glob Alike can't take (e.g. `vendor/llm-*` + `/**`) into concrete folders; `files` (the repo's
+ * files) lets a cell's file list collapse to its folder.
+ *
+ * What the decision *protects* (`protects`, known only when the decision turn ends) is never added: Alike's device
+ * token has no update call (`update_entity` is MCP-only), and recording a second entity would duplicate the decision.
+ * Those files are covered by the folder anchors above (`src/gateway/` holds DR-4's filing mode and is a context anchor).
  */
-export function decisionAnchors(map: DomainMap, d: DecisionInput, repository: string | null, expand: (glob: string) => string[] = () => []): AlikeAnchor[] {
+export function decisionAnchors(map: DomainMap, d: DecisionInput, repository: string | null, expand: (glob: string) => string[] = () => [], files?: readonly string[]): AlikeAnchor[] {
   const governs = new Set<string>();
   const context = new Set<string>();
   const inv = d.invariant;
+  const mapper = createMapper(map);
+  const sides = [...new Set(d.files.map((f) => mapper.domainOf(f)).filter((x): x is string => !!x))].sort();
+  for (const dom of sides) for (const p of domainPaths(map, dom, expand, files)) governs.add(p);
   if (inv.kind === 'no_edge') {
-    for (const p of domainPaths(map, inv.from, expand)) governs.add(p);
-    for (const p of domainPaths(map, inv.to, expand)) context.add(p);
+    for (const p of domainPaths(map, inv.from, expand, files)) governs.add(p);
+    for (const p of domainPaths(map, inv.to, expand, files)) context.add(p);
   } else if (inv.kind === 'only_via') {
     for (const g of inv.targets) for (const p of anchorPath(g) ? [anchorPath(g)!] : expand(g)) governs.add(p);
-    for (const dom of inv.allowed_from) for (const p of domainPaths(map, dom, expand)) context.add(p);
+    for (const dom of inv.allowed_from) for (const p of domainPaths(map, dom, expand, files)) context.add(p);
   } else {
     for (const owner of new Set(Object.values(inv.owners))) {
       const cell = map.domains.find((x) => x.id === owner)?.cells.data;
@@ -117,7 +149,7 @@ function situationFor(map: DomainMap, inv: Invariant): string {
 }
 
 /** The principle, not the incident: title and rationale an agent elsewhere can act on. */
-export function alikeDecision(map: DomainMap, d: DecisionInput, repository: string | null, expand?: (glob: string) => string[]): AlikeDecision {
+export function alikeDecision(map: DomainMap, d: DecisionInput, repository: string | null, expand?: (glob: string) => string[], files?: readonly string[]): AlikeDecision {
   return {
     title: `${d.id}: ${d.title}`,
     outcome: d.outcome,
@@ -130,7 +162,7 @@ export function alikeDecision(map: DomainMap, d: DecisionInput, repository: stri
     ].join(' '),
     decision_type: 'standing',
     status: 'made',
-    anchors: decisionAnchors(map, d, repository, expand),
+    anchors: decisionAnchors(map, d, repository, expand, files),
   };
 }
 

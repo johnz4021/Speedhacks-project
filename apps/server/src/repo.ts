@@ -246,16 +246,17 @@ export class Repo {
 
   /**
    * A file changed on disk: emit `edited` (+/− lines) and edge events from its import diff, and update facts.
-   * Called by the PostToolUse hook (attributed) and the watcher (unattributed). No-op if the content is unchanged.
+   * Called by the PostToolUse hook (attributed) and the watcher (unattributed). No-op (null) if the content is unchanged.
+   * Returns what changed: lines and, for code, which symbols (the hook checks it against protected code).
    */
-  fileChanged(path: string, attr: { tool?: string; unattributed?: boolean }) {
-    if (this.mapper.isIgnored(path)) return;
+  fileChanged(path: string, attr: { tool?: string; unattributed?: boolean }): { added: number; removed: number; symbols: SymbolDiff | null } | null {
+    if (this.mapper.isIgnored(path)) return null;
     const abs = join(this.root, path);
     const deleted = !existsSync(abs);
     const next = deleted ? '' : readFileSync(abs, 'utf8');
     const prev = this.contents.get(path);
     const known = this.facts.files.includes(path);
-    if (prev === next && known) return;
+    if (prev === next && known) return null;
     if (!attr.unattributed) { clearTimeout(this.pending.get(path)); this.pending.delete(path); }
 
     let added = 0, removed = 0;
@@ -309,6 +310,7 @@ export class Repo {
 
     // Exports or symbol names moved: importers that linked through this file re-link (barrels included).
     if (tier1 && shapeChanged) this.relink(path);
+    return { added, removed, symbols: symbols ?? null };
   }
 
   /** Completeness: any write that no hook reported (e.g. from Bash) becomes an unattributed `edited` event. */

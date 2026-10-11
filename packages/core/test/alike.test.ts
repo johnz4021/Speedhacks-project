@@ -56,6 +56,24 @@ describe('anchors', () => {
     expect(decisionAnchors(map, dr4(), null).map((x) => x.kind)).toEqual(['situation']);
   });
 
+  it("beat 3's DR-1 decision anchors the asking side (src/tools/) and the gateway as folders (src/gateway/)", () => {
+    const scout = JSON.parse(readFileSync(new URL('./fixtures/scout-real.json', import.meta.url), 'utf8')) as { fileFacts: Record<string, unknown> };
+    const files = [...Object.keys(scout.fileFacts), 'src/gateway/schema.sql', 'src/tools/filing-summarize.ts'];
+    const expand = (g: string) => (g === 'vendor/llm-*/**' ? ['vendor/llm-anthropic/', 'vendor/llm-openai/'] : []);
+    const d = dr4({
+      title: 'Filings go through the gateway, in a filing mode that keeps figures intact', invariant: inv('DR-1'),
+      files: ['src/tools/filing-summarize.ts'], rejected: 'Add an exception for src/tools/filing-summarize.ts and record why',
+    });
+    const a = decisionAnchors(map, d, 'johnz4021/scout-agent-takew3c', expand, files);
+    const by = (label: string) => a.filter((x) => x.kind === 'path' && x.label === label).map((x) => (x as { path: string }).path);
+    expect(by('governs').slice(0, 2)).toEqual(['src/tools/', 'web/src/features/tools/']);
+    expect(by('governs')).toEqual(expect.arrayContaining(['vendor/llm-anthropic/', 'vendor/llm-openai/', 'vendor/embeddings/']));
+    expect(by('context')).toContain('src/gateway/');
+    expect(by('context').some((p) => p.startsWith('src/gateway/') && p !== 'src/gateway/')).toBe(false);
+    expect(a.filter((x) => x.kind === 'path').length).toBeLessThanOrEqual(20);
+    expect(a.at(-1)).toMatchObject({ kind: 'situation' });
+  });
+
   it('states the principle and the rejected option in the decision', () => {
     const d = alikeDecision(map, dr4(), 'o/r');
     expect(d.title).toBe('DR-4: Research tools never read outreach data; the run loop passes outreach context in');
