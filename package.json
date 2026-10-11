@@ -5,6 +5,7 @@
   "workspaces": ["packages/*", "apps/*"],
   "scripts": {
     "dev": "concurrently -k -n server,shell -c blue,magenta \"npm run dev -w @harness/server\" \"npm run dev -w @harness/shell\"",
+    "demo": "scripts/demo.sh",
     "test": "npm test -w @harness/core && npm test -w @harness/shell",
     "typecheck": "tsc -b packages/core apps/server apps/shell"
   },
