@@ -5,7 +5,8 @@ import { check, type Violation } from './rules';
 import type { DomainMap } from './schema';
 
 /** One step of a `submit_plan` call. Import `to` is a repo path (extension optional) or a specifier relative to `from`. */
-export type PlanStep = { n: number; text: string; files: string[]; imports: { from: string; to: string }[] };
+/** `symbols`: optional `path#qualified.name` ids the step changes or adds (drives symbol-level ghosts). */
+export type PlanStep = { n: number; text: string; files: string[]; imports: { from: string; to: string }[]; symbols?: string[] };
 
 export type PlanFootprint = {
   cells: { domain: string; layer: string; steps: number[]; files: string[] }[];

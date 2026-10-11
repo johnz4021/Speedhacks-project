@@ -64,7 +64,8 @@ export type EventData = {
   test_result: { domain: string; passed: number; failed: number };
   decision_recorded: { id: string; title: string; invariant: string; option: 'A' | 'B'; paths: string[]; alike?: boolean; urn?: string };
   turn_ended: { added: number; removed: number; files: string[]; reason: string };
-  chat: { role: 'user' | 'assistant' | 'system'; text: string };
+  /** `context`: node ids the user pointed at (shift-click) for this message; shown as chips, sent to Claude resolved. */
+  chat: { role: 'user' | 'assistant' | 'system'; text: string; context?: string[] };
   approval_requested: { plan: string };
   error: { message: string };
   /** A file's Tier 1 facts after it changed (null = deleted). Emitted with every `edited`/`file_assigned`. */
@@ -134,7 +135,7 @@ export type UIState = {
   turns: TurnState[];
   current: string | null;
   cursor: { cell: Cell | null; path: string; verb: string } | null;
-  chat: { role: 'user' | 'assistant' | 'system'; text: string; turn: string | null; t: number }[];
+  chat: { role: 'user' | 'assistant' | 'system'; text: string; turn: string | null; t: number; context?: string[] }[];
   awaitingApproval: { turn: string | null; plan: string } | null;
   pendingFork: { turn: string | null; violations: Violation[] } | null;
   decisions: Decision[];
@@ -288,8 +289,8 @@ export function apply(s: UIState, e: HarnessEvent, index: number): UIState {
       break;
     }
     case 'chat': {
-      const { role, text } = d as EventData['chat'];
-      s.chat.push({ role, text, turn: e.turn, t: e.t });
+      const { role, text, context } = d as EventData['chat'];
+      s.chat.push({ role, text, turn: e.turn, t: e.t, ...(context?.length ? { context } : {}) });
       break;
     }
     case 'looked':
