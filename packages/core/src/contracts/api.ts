@@ -10,9 +10,15 @@ import type { DriftSignal, DriftThresholds, HistoryTurn, MapScore, ProposalChang
 export type TurnActivity = {
   turn: string | null;
   leaves: Record<string, LeafActivity>;
-  plannedEdges: { from: string; to: string; steps: number[]; violation: ViolationState }[]; // file → file
+  /** file → file planned imports not built yet; gate-blocked imports join with `steps: []` and violation `new`. */
+  plannedEdges: { from: string; to: string; steps: number[]; violation: ViolationState }[];
   addedEdges: string[]; // GraphEdge ids added this turn
-  cursor: string | null; // leaf id the agent is on
+  cursor: string | null; // leaf id the agent is on (its cell when the path is not a leaf, e.g. a searched directory)
+  verb: string | null; // what the agent is doing there ('reading' | 'searching' | 'editing')
+  /** Leaf id → invariant ids it crosses (current violations and this turn's plan/gate ones). */
+  rules: Record<string, string[]>;
+  /** Planned leaves that do not exist yet (no placement and no facts). */
+  plannedNew: string[];
   /** Current (map-level) violations: files that have one, and the `imports` GraphEdge ids they target. */
   violations: { files: string[]; edges: string[] };
 };

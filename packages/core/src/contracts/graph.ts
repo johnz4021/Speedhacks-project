@@ -93,7 +93,9 @@ export type Rollup = {
   cursor: boolean;
   audit: number;
   proposal: ProposalMark;
-  leaves: number; // files (or symbols) underneath
+  rules: string[]; // invariant ids crossed underneath (existing or new), sorted
+  plannedNew: boolean; // contains a planned leaf that does not exist yet
+  leaves: number; // files (or symbols) underneath; interface members are not counted
 };
 
 export type VisibleNode = {
@@ -108,6 +110,7 @@ export type VisibleNode = {
   domain?: string;
   layer?: string;
   path?: string;
+  preview: string[]; // collapsed containers: labels of up to 4 children, by order
   rollup: Rollup;
 };
 
@@ -127,10 +130,15 @@ export type VisibleEdge = {
   leafEdges: string[]; // GraphEdge ids (or plan import keys for ghosts)
 };
 
-/** Where an aggregated edge crosses out of an expanded container. */
-export type Port = { container: string; edge: string; side: 'top' | 'right' | 'bottom' | 'left'; direction: 'out' | 'in' };
+/** Where an aggregated edge crosses out of an expanded container. `peer` is the visible node at the other end; the side is the layout's call. */
+export type Port = { container: string; edge: string; peer: string; direction: 'out' | 'in' };
 
-export type Projection = { nodes: VisibleNode[]; edges: VisibleEdge[]; ports: Port[] };
+/** The visible node carrying the agent cursor, the leaf (or cell) it is on, and what it is doing. */
+export type ProjectionCursor = { node: string; leaf: string; verb: string };
+/** The grid the projection is drawn on, in map order: domain ids, layer ids that have cells, and the cell ids that exist. */
+export type ProjectionGrid = { domains: string[]; layers: string[]; cells: string[] };
+
+export type Projection = { nodes: VisibleNode[]; edges: VisibleEdge[]; ports: Port[]; cursor: ProjectionCursor | null; grid: ProjectionGrid };
 
 // ---------------------------------------------------------------- ids
 

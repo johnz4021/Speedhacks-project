@@ -1,7 +1,7 @@
 // activityFor: the selected turn's activity per leaf (file and symbol ids), a pure read of the reduced UI state.
 import type { UIState } from '../events';
 import type { TurnActivity } from '../contracts/api';
-import { edgeId, fileOf, type ContextGraph, type LeafActivity, type ProposalMark, type ViolationState } from '../contracts/graph';
+import { cellId, edgeId, fileOf, type ContextGraph, type LeafActivity, type ProposalMark, type ViolationState } from '../contracts/graph';
 import { byId, edgeIds, outEdges } from './util';
 
 const PROPOSAL_RANK: Record<NonNullable<ProposalMark>, number> = { rename: 1, add: 2, move_in: 3, move_out: 4, remove: 5 };
@@ -23,7 +23,11 @@ const normalize = (p: string) => p.replace(/\\/g, '/').split('/').filter((s) => 
  * - unplanned: edited, the turn has a plan (`turn.planned` non-empty), and neither the leaf nor its file is planned;
  * - violation: `new` for a turn violation (plan or gate) not already on the map (same file + invariant),
  *   else `existing` for a current violation;
- * - cursor (only for the current turn), audit (open findings), proposal (pending proposals touching the leaf).
+ * - cursor (only for the current turn; a path that is not a leaf, like a searched directory, falls back to its
+ *   cell), audit (open findings), proposal (pending proposals touching the leaf);
+ * - rules: invariant ids per leaf (current violations, plus the turn's plan and gate ones);
+ * - plannedNew: planned leaves with no placement and no facts yet;
+ * - plannedEdges: planned imports not built yet, plus gate-blocked imports (`steps: []`, violation `new`).
  */
 export function activityFor(ui: UIState, graph: ContextGraph, turnId: string | null = ui.turns.at(-1)?.id ?? null): TurnActivity {
   const turn = turnId ? ui.turns.find((t) => t.id === turnId) ?? null : null;
@@ -32,6 +36,12 @@ export function activityFor(ui: UIState, graph: ContextGraph, turnId: string | n
   const leaves: Record<string, LeafActivity> = {};
   const has = (id: string) => !!graph.nodes[id];
   const leaf = (id: string) => (leaves[id] ??= emptyLeaf());
+  const plannedNew: string[] = [];
+  const rules: Record<string, string[]> = {};
+  const rule = (file: string, invariant: string) => {
+    const list = (rules[file] ??= []);
+    if (!list.includes(invariant)) list.push(invariant);
+  };
 
   if (turn) {
     for (const [path, pa] of Object.entries(turn.paths)) {
@@ -66,6 +76,8 @@ export function activityFor(ui: UIState, graph: ContextGraph, turnId: string | n
       const l = leaf(id);
       l.planned = true;
       if (!l.edited) l.ghostSteps = [...set].sort((a, b) => a - b);
+      const file = fileOf(id);
+      if (file && !l.edited && !ui.files[file] && !ui.facts[file]) plannedNew.push(id);
     }
     const hasPlan = Object.keys(turn.planned).length > 0;
     for (const [id, l] of Object.entries(leaves)) {
@@ -80,6 +92,7 @@ export function activityFor(ui: UIState, graph: ContextGraph, turnId: string | n
   for (const v of ui.violations) {
     if (!has(v.file)) continue;
     files.add(v.file);
+    rule(v.file, v.invariant);
     const l = leaf(v.file);
     l.violation ??= 'existing';
     for (const e of out.get(v.file) ?? []) if (e.kind === 'imports' && (!v.target || v.target === e.to)) edges.add(e.id);
@@ -87,15 +100,21 @@ export function activityFor(ui: UIState, graph: ContextGraph, turnId: string | n
   const known = (file: string, invariant: string) => ui.violations.some((x) => x.file === file && x.invariant === invariant);
   if (turn) {
     for (const v of [...turn.planViolations, ...turn.gateBlocks]) {
-      if (known(v.file, v.invariant) || !has(v.file)) continue;
+      if (!has(v.file)) continue;
+      rule(v.file, v.invariant);
+      if (known(v.file, v.invariant)) continue;
       leaf(v.file).violation = 'new';
     }
   }
 
   let cursor: string | null = null;
-  if (ui.cursor && (!turn || turn.id === ui.current) && has(ui.cursor.path)) {
-    cursor = ui.cursor.path;
-    leaf(cursor).cursor = true;
+  if (ui.cursor && (!turn || turn.id === ui.current)) {
+    const c = ui.cursor;
+    const at = has(c.path) ? c.path : c.cell && has(cellId(c.cell.domain, c.cell.layer)) ? cellId(c.cell.domain, c.cell.layer) : null;
+    if (at) {
+      cursor = at;
+      leaf(cursor).cursor = true;
+    }
   }
 
   for (const f of Object.values(ui.findings)) {
@@ -128,6 +147,14 @@ export function activityFor(ui: UIState, graph: ContextGraph, turnId: string | n
         plannedEdges.push({ from: i.from, to: i.to, steps: [...pe.steps], violation });
       }
     }
+    // an import the edit gate blocked is a would-be edge: a ghost carrying the new violation
+    for (const v of turn.gateBlocks) {
+      if (!v.target || !has(v.file) || !has(v.target) || ids.has(edgeId('imports', v.file, v.target))) continue;
+      const kind = graph.nodes[v.target]!.kind;
+      if (kind !== 'file' && kind !== 'vendor') continue;
+      if (plannedEdges.some((p) => p.from === v.file && p.to === v.target)) continue;
+      plannedEdges.push({ from: v.file, to: v.target, steps: [], violation: 'new' });
+    }
     plannedEdges.sort((a, b) => byId(a.from, b.from) || byId(a.to, b.to));
   }
 
@@ -141,6 +168,9 @@ export function activityFor(ui: UIState, graph: ContextGraph, turnId: string | n
     plannedEdges,
     addedEdges: [...added].filter((id) => ids.has(id)).sort(byId),
     cursor,
+    verb: cursor ? ui.cursor!.verb : null,
     violations: { files: [...files].sort(byId), edges: [...edges].sort(byId) },
+    rules: Object.fromEntries(Object.entries(rules).map(([k, v]) => [k, v.sort(byId)])),
+    plannedNew: plannedNew.sort(byId),
   };
 }

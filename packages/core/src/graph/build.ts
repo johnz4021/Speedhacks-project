@@ -97,7 +97,7 @@ export function buildGraph(
 
   const putFile = (path: string, parent: string) => {
     const p = placement.get(path)!;
-    const n: Omit<GraphNode, 'order'> = { id: path, kind: 'file', parent, label: path.slice(path.lastIndexOf('/') + 1), path };
+    const n: Omit<GraphNode, 'order'> = { id: path, kind: 'file', parent, label: fileLabel(path), path };
     if (p.kind === 'cell' || p.kind === 'test') n.domain = p.domain;
     if (p.kind === 'cell') n.layer = p.layer;
     add(n, KIND_RANK.file!);
@@ -241,6 +241,13 @@ export function buildGraph(
     for (let i = 0; i < list.length; i++) nodes[list[i]!]!.order = grid ? rank.get(list[i]!)! : i;
   }
   return { root: ROOT_ID, nodes, children, edges };
+}
+
+/** A file's label: its name, with the folder for index files (`vendor/news/index.ts` → `news/index.ts`). */
+export function fileLabel(path: string): string {
+  const parts = path.split('/');
+  const name = parts.pop()!;
+  return /^index\.[cm]?[jt]sx?$/.test(name) && parts.length ? `${parts.pop()}/${name}` : name;
 }
 
 /** Longest common directory of sorted paths (the common prefix of the first and last, cut at a `/`). */

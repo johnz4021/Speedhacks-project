@@ -75,13 +75,15 @@ function domainEdgesOf(p: Projection) {
     const a = byId.get(e.from)!;
     const b = byId.get(e.to)!;
     if (a.kind !== 'cell' || b.kind !== 'cell' || a.domain === b.domain) continue;
+    // gate-blocked imports are ghosts too (contract revision); edgeViews only knows planned ones
+    if (e.status === 'ghost' && e.leafEdges.every((id) => id.startsWith('gate|'))) continue;
     const ghost = e.status === 'ghost';
     const k = `${ghost ? 'ghost' : 'solid'}:${a.domain}->${b.domain}`;
     const cur = out.get(k) ?? { from: a.domain!, to: b.domain!, state: ghost ? 'ghost' : 'existing', violation: false, steps: [], files: [] };
     if (e.status === 'new') cur.state = 'new';
     cur.violation ||= e.violation !== null;
     cur.steps = sorted([...new Set([...cur.steps, ...e.steps])]);
-    cur.files.push(...e.leafEdges.map((id) => id.split('|').slice(1).join(' -> ')));
+    cur.files.push(...e.leafEdges.filter((id) => !id.startsWith('gate|')).map((id) => id.split('|').slice(1).join(' -> ')));
     out.set(k, cur);
   }
   return [...out.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, v]) => ({ ...v, files: sorted(v.files) }));

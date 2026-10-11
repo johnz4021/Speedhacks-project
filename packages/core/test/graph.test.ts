@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { activityFor, autoExpand, buildGraph, emptyLeaf, graphOf, project, trace, VENDORS_ID } from '../src/graph';
+import { activityFor, autoExpand, buildGraph, emptyLeaf, fileLabel, graphOf, project, trace, VENDORS_ID } from '../src/graph';
 import { cellId, domainId, edgeId, groupId, testsId, type ContextGraph, type LeafActivity, type ViewState } from '../src/contracts/graph';
 import type { ActivityFor, AutoExpand, BuildGraph, Project, Trace, TurnActivity } from '../src/contracts/api';
 import type { CallFact, FileFacts, SemanticFacts, SymbolFact } from '../src/contracts/facts';
 import { parseDomainMap } from '../src/schema';
 import { reduce } from '../src/events';
+import type { Violation } from '../src/rules';
 import { demoLog } from './turn-log';
 import { scoutFacts } from './scout-facts';
 import { loadMap } from './helpers';
@@ -66,7 +67,7 @@ export const contract: [BuildGraph, ActivityFor, Project, AutoExpand, Trace] = [
 const view = (expanded: string[] = [], lens: Partial<ViewState['lens']> = {}): ViewState => ({ expanded, focus: null, lens: { kinds: [], turnOnly: false, ...lens }, budget: 50, follow: false });
 const act = (leaves: Record<string, Partial<LeafActivity>>, extra: Partial<TurnActivity> = {}): TurnActivity => ({
   turn: 't', leaves: Object.fromEntries(Object.entries(leaves).map(([k, v]) => [k, { ...emptyLeaf(), ...v }])),
-  plannedEdges: [], addedEdges: [], cursor: null, violations: { files: [], edges: [] }, ...extra,
+  plannedEdges: [], addedEdges: [], cursor: null, verb: null, violations: { files: [], edges: [] }, rules: {}, plannedNew: [], ...extra,
 });
 const kidsOf = (g: ContextGraph, id: string) => g.children[id] ?? [];
 
@@ -91,6 +92,7 @@ describe('buildGraph', () => {
   it('puts claimed vendors in the external cell, others under Vendors; groups confirmed components', () => {
     expect(g.nodes['vendor:openai']).toMatchObject({ parent: 'cell:a/external', kind: 'vendor' });
     expect(g.nodes['vendor:left-pad']).toMatchObject({ parent: VENDORS_ID });
+    expect([fileLabel('vendor/news/index.ts'), fileLabel('src/a.ts'), fileLabel('index.ts')]).toEqual(['news/index.ts', 'a.ts', 'index.ts']);
     expect(kidsOf(g, 'cell:c/logic')).toEqual([groupId('c', 'logic', 'core'), 'src/c/other.ts']);
     expect(g.nodes[groupId('c', 'logic', 'core')]).toMatchObject({ label: 'Core', kind: 'group' });
   });
@@ -241,32 +243,99 @@ describe('project', () => {
     expect(p.edges).toEqual([]);
   });
 
-  it('adds ports on every expanded container an edge crosses, with grid sides', () => {
+  it('adds ports on every expanded container an edge crosses, naming the visible node at the other end', () => {
     const p1 = project(g, view(['domain:a']), act({}));
     const e1 = p1.edges.find((e) => e.from === 'cell:a/logic' && e.to === 'domain:b')!;
-    expect(p1.ports.filter((x) => x.edge === e1.id)).toEqual([{ container: 'domain:a', edge: e1.id, side: 'right', direction: 'out' }]);
+    expect(p1.ports.filter((x) => x.edge === e1.id)).toEqual([{ container: 'domain:a', edge: e1.id, peer: 'domain:b', direction: 'out' }]);
     const back = p1.edges.find((e) => e.from === 'domain:c' && e.to === 'cell:a/logic')!;
-    expect(p1.ports.filter((x) => x.edge === back.id)).toEqual([{ container: 'domain:a', edge: back.id, side: 'right', direction: 'in' }]);
+    expect(p1.ports.filter((x) => x.edge === back.id)).toEqual([{ container: 'domain:a', edge: back.id, peer: 'domain:c', direction: 'in' }]);
 
     const p2 = project(g, view(['domain:a', 'domain:b', 'cell:a/logic', 'cell:b/logic']), act({}));
     const e2 = p2.edges.find((e) => e.from === 'src/a/logic/f1.ts' && e.to === 'src/b/g.ts')!;
     expect(p2.ports.filter((x) => x.edge === e2.id)).toEqual([
-      { container: 'cell:a/logic', edge: e2.id, side: 'right', direction: 'out' },
-      { container: 'domain:a', edge: e2.id, side: 'right', direction: 'out' },
-      { container: 'cell:b/logic', edge: e2.id, side: 'left', direction: 'in' },
-      { container: 'domain:b', edge: e2.id, side: 'left', direction: 'in' },
+      { container: 'cell:a/logic', edge: e2.id, peer: 'src/b/g.ts', direction: 'out' },
+      { container: 'domain:a', edge: e2.id, peer: 'src/b/g.ts', direction: 'out' },
+      { container: 'cell:b/logic', edge: e2.id, peer: 'src/a/logic/f1.ts', direction: 'in' },
+      { container: 'domain:b', edge: e2.id, peer: 'src/a/logic/f1.ts', direction: 'in' },
     ]);
-    // within a column: rows → top/bottom (entry above logic; tests below every layer)
+    // within a column: file edges between expanded cells are drawn, with ports on both cells
     const p3 = project(g, view(['domain:a', 'cell:a/entry', 'cell:a/logic']), act({}));
     const down = p3.edges.find((e) => e.from === 'src/a/entry/api.ts' && e.to === 'src/a/logic/f1.ts')!;
     expect(p3.ports.filter((x) => x.edge === down.id)).toEqual([
-      { container: 'cell:a/entry', edge: down.id, side: 'bottom', direction: 'out' },
-      { container: 'cell:a/logic', edge: down.id, side: 'top', direction: 'in' },
+      { container: 'cell:a/entry', edge: down.id, peer: 'src/a/logic/f1.ts', direction: 'out' },
+      { container: 'cell:a/logic', edge: down.id, peer: 'src/a/entry/api.ts', direction: 'in' },
     ]);
     const up = p3.edges.find((e) => e.from === testsId('a') && e.to === 'src/a/logic/f1.ts')!;
-    expect(p3.ports.filter((x) => x.edge === up.id)).toEqual([{ container: 'cell:a/logic', edge: up.id, side: 'bottom', direction: 'in' }]);
+    expect(p3.ports.filter((x) => x.edge === up.id)).toEqual([{ container: 'cell:a/logic', edge: up.id, peer: testsId('a'), direction: 'in' }]);
     // no ports when both endpoints are top-level
     expect(project(g, view(), act({})).ports).toEqual([]);
+  });
+
+  it('drops edges between two cells of one domain (flow down a column is implied), solid and ghost', () => {
+    const a = act({}, { plannedEdges: [{ from: 'src/a/entry/api.ts', to: 'src/a/logic/f2.ts', steps: [1], violation: null }] });
+    const p = project(g, view(['domain:a']), a);
+    expect(p.edges.filter((e) => e.from.startsWith('cell:a/') && e.to.startsWith('cell:a/'))).toEqual([]);
+    // a file in an expanded cell still draws to the next cell down, and to its sibling files
+    const open = project(g, view(['domain:a', 'cell:a/entry']), a);
+    expect(open.edges.map((e) => e.id)).toContain('src/a/entry/api.ts->cell:a/logic');
+    expect(open.edges.map((e) => e.id)).toContain('ghost:src/a/entry/api.ts->cell:a/logic');
+  });
+
+  it('previews the first children of collapsed containers, by order', () => {
+    const p = project(g, view(['domain:a']), act({}));
+    const at = (id: string) => p.nodes.find((n) => n.id === id)!;
+    expect(at('cell:a/logic').preview).toEqual(['f1.ts', 'f2.ts', 'ta']);
+    expect(at('domain:b').preview).toEqual(['Logic']);
+    expect(at('domain:a').preview).toEqual([]); // expanded
+    const open = project(g, view(['domain:a', 'cell:a/logic']), act({}));
+    expect(open.nodes.find((n) => n.id === 'src/a/logic/f1.ts')!.preview).toEqual([]); // files are leaves here
+    const many = buildGraph(mini, Object.fromEntries(Array.from({ length: 6 }, (_, i) => [`src/b/f${i}.ts`, ff(`src/b/f${i}.ts`)])));
+    expect(project(many, view(['domain:b']), act({})).nodes.find((n) => n.id === 'cell:b/logic')!.preview).toEqual(['f0.ts', 'f1.ts', 'f2.ts', 'f3.ts']);
+  });
+
+  it('rolls up rules and planned-new leaves, and places the cursor on the nearest visible node', () => {
+    const a = act(
+      { 'src/a/logic/f2.ts': { cursor: true }, 'src/a/logic/new.ts': { planned: true, ghostSteps: [1] } },
+      { cursor: 'src/a/logic/f2.ts', verb: 'editing', rules: { 'src/a/logic/f1.ts': ['DR-1'], 'src/b/g.ts': ['DR-2', 'DR-3'], 'src/a/logic/f2.ts': ['DR-2'] }, plannedNew: ['src/a/logic/new.ts'] },
+    );
+    const withNew = buildGraph(mini, { ...miniFacts(), 'src/a/logic/new.ts': ff('src/a/logic/new.ts') });
+    const p = project(withNew, view(['domain:a']), a);
+    const at = (id: string) => p.nodes.find((n) => n.id === id)!.rollup;
+    expect(at('cell:a/logic')).toMatchObject({ rules: ['DR-1', 'DR-2'], plannedNew: true });
+    expect(at('domain:a')).toMatchObject({ rules: ['DR-1', 'DR-2'], plannedNew: true });
+    expect(at('domain:b')).toMatchObject({ rules: ['DR-2', 'DR-3'], plannedNew: false });
+    expect(at('cell:a/entry')).toMatchObject({ rules: [], plannedNew: false });
+    expect(p.cursor).toEqual({ node: 'cell:a/logic', leaf: 'src/a/logic/f2.ts', verb: 'editing' });
+    const deep = project(withNew, view(['domain:a', 'cell:a/logic']), a);
+    expect(deep.cursor).toEqual({ node: 'src/a/logic/f2.ts', leaf: 'src/a/logic/f2.ts', verb: 'editing' });
+    expect(deep.nodes.find((n) => n.id === 'src/a/logic/new.ts')!.rollup.plannedNew).toBe(true);
+    expect(project(withNew, view(), act({})).cursor).toBeNull();
+  });
+
+  it('describes the grid in map order', () => {
+    const p = project(g, view(), act({}));
+    expect(p.grid).toEqual({
+      domains: ['a', 'b', 'c'],
+      layers: ['entry', 'logic', 'external'],
+      cells: ['cell:a/entry', 'cell:a/logic', 'cell:a/external', 'cell:b/logic', 'cell:c/logic'],
+    });
+  });
+
+  it('keeps interface members out of view and out of counts until their type is expanded', () => {
+    const file = 'src/b/g.ts';
+    const s = (name: string, kind: SymbolFact['kind'], parent: string | null = null): SymbolFact => ({ ...sym(file, name, parent), kind });
+    const facts = { ...miniFacts(), [file]: ff(file, { symbols: [s('Tool', 'type'), s('Tool.run', 'property', 'Tool'), s('Tool.name', 'property', 'Tool'), s('Impl', 'class'), s('Impl.run', 'method', 'Impl'), s('g', 'function')] }) };
+    const gi = buildGraph(mini, facts);
+    expect(gi.nodes[`${file}#Tool.run`]).toMatchObject({ parent: `${file}#Tool`, kind: 'symbol' }); // still in the graph
+    const open = project(gi, view(['domain:b', 'cell:b/logic', file]), act({}));
+    const ids = open.nodes.map((n) => n.id);
+    expect(ids).toContain(`${file}#Tool`);
+    expect(ids).not.toContain(`${file}#Tool.run`);
+    // a class's methods count; an interface's members do not (Tool, Impl, Impl.run, g)
+    expect(open.nodes.find((n) => n.id === file)!.rollup.leaves).toBe(4);
+    expect(open.nodes.find((n) => n.id === `${file}#Tool`)!).toMatchObject({ expandable: true, rollup: expect.objectContaining({ leaves: 1 }) });
+    const deeper = project(gi, view(['domain:b', 'cell:b/logic', file, `${file}#Tool`]), act({}));
+    expect(deeper.nodes.map((n) => n.id)).toEqual(expect.arrayContaining([`${file}#Tool.run`, `${file}#Tool.name`]));
   });
 });
 
@@ -392,5 +461,36 @@ describe('activityFor', () => {
     const p = project(g, view(), a);
     expect(p.nodes.find((n) => n.id === domainId('gateway'))!.rollup).toMatchObject({ added: 1, audit: 1, proposal: 'move_out', edited: true });
     expect(p.nodes.find((n) => n.id === cellId('outreach', 'logic'))).toBeUndefined();
+  });
+
+  it('turns gate-blocked imports into ghost edges carrying a new violation, and tracks rules, planned-new leaves and the cursor verb', () => {
+    const { events } = demoLog();
+    const block: Violation = {
+      invariant: 'DR-3', kind: 'no_edge', reason: 'tools never depend on outreach', file: 'src/tools/news-summarize.ts',
+      detail: '', options: ['A', 'B'], target: 'src/outreach/send.ts',
+    };
+    const t2 = (kind: string, data: Record<string, unknown>, extra: Record<string, unknown> = {}) => ({ id: `g${kind}`, t: 9, session: 's1', turn: 't2', kind, data, ...extra });
+    const extra = [
+      t2('turn_started', { prompt: 'x', head: '', baseline: '' }),
+      t2('planned', { steps: [{ n: 1, text: 'new', files: ['src/tools/brand-new.ts'], imports: [] }], cells: [{ domain: 'tools', layer: 'logic', steps: [1], files: ['src/tools/brand-new.ts'] }], edges: [], unassigned: [] }),
+      t2('cursor', { verb: 'searching' }, { path: 'vendor/news', cell: { domain: 'tools', layer: 'external' } }),
+      t2('gate_blocked', { violation: block, tool: 'Edit' }, { path: block.file }),
+    ] as unknown as typeof events;
+    const ui = reduce([...events, ...extra]);
+    const g = graphOf(ui)!;
+    const a = activityFor(ui, g);
+    expect(a.plannedEdges).toContainEqual({ from: 'src/tools/news-summarize.ts', to: 'src/outreach/send.ts', steps: [], violation: 'new' });
+    expect(a.rules['src/tools/news-summarize.ts']).toEqual(['DR-1', 'DR-3']);
+    expect(a.plannedNew).toEqual(['src/tools/brand-new.ts']);
+    // a searched directory is not a leaf: the cursor falls back to its cell
+    expect([a.cursor, a.verb]).toEqual([cellId('tools', 'external'), 'searching']);
+    const p = project(g, view(ui.map!.domains.map((d) => domainId(d.id))), a);
+    const ghost = p.edges.find((e) => e.status === 'ghost' && e.from === 'cell:tools/logic' && e.to === 'cell:outreach/logic')!;
+    expect(ghost).toMatchObject({ violation: 'new', steps: [], leafEdges: ['gate|src/tools/news-summarize.ts|src/outreach/send.ts'] });
+    expect(p.cursor).toEqual({ node: cellId('tools', 'external'), leaf: cellId('tools', 'external'), verb: 'searching' });
+    expect(p.nodes.find((n) => n.id === 'cell:tools/logic')!.rollup).toMatchObject({ rules: ['DR-1', 'DR-3'], plannedNew: true });
+    // answering the fork clears the gate block, and with it the ghost
+    const answered = reduce([...events, ...extra, t2('fork_answered', { option: 'A', text: 'A', violations: [block] })] as typeof events);
+    expect(activityFor(answered, graphOf(answered)!).plannedEdges.some((e) => e.steps.length === 0)).toBe(false);
   });
 });

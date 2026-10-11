@@ -40,7 +40,7 @@ function synthetic() {
   for (let i = 0; i < 30; i++) leaves[paths[i * 7]!] = { ...emptyLeaf(), edited: i % 2 === 0, looked: true, added: i, violation: i % 9 === 0 ? 'new' : null, ghostSteps: i % 2 ? [1] : [], planned: i % 2 === 1 };
   const added = paths.slice(0, 8).map((p) => `imports|${p}|${facts[p]!.imports[0]!.to}`);
   const activity: TurnActivity = {
-    turn: 't', leaves, addedEdges: added, cursor: paths[0]!, violations: { files: [paths[14]!], edges: added.slice(0, 3) },
+    turn: 't', leaves, addedEdges: added, cursor: paths[0]!, verb: 'editing', rules: { [paths[14]!]: ['DR-1'] }, plannedNew: [], violations: { files: [paths[14]!], edges: added.slice(0, 3) },
     plannedEdges: Array.from({ length: 10 }, (_, i) => ({ from: paths[i]!, to: paths[i + 100]!, steps: [1], violation: null })),
   };
   return { map, facts, activity };
