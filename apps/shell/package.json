@@ -1,0 +1,27 @@
+{
+  "name": "@harness/shell",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5173 --strictPort",
+    "build": "tsc -p . --noEmit && vite build",
+    "preview": "vite preview --port 5173",
+    "fake": "tsx scripts/fake-events.ts"
+  },
+  "dependencies": {
+    "@fontsource/barlow": "^5.3.0",
+    "@fontsource/barlow-semi-condensed": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
+    "@harness/core": "*",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^4.5.5"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "tsx": "^4.23.15",
+    "vite": "^5.4.11"
+  }
+}

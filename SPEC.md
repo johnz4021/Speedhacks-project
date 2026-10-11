@@ -56,7 +56,7 @@ Run: `HARNESS_REPO=../scout-agent npm run dev` (server on 4310, shell on 5173).
 
 Schema: see `fixtures/scout-agent.domains.yaml`. Domains are columns, layers are rows (rows come from the file, not hard-coded). Each cell lists path globs and, for data cells, owned tables. `neutral` paths never create edges; `ignore` paths are skipped. Files that match no cell land in an **Unassigned** column.
 
-**Tests** are assigned to a domain by its `tests` globs. A test file counts as part of that domain for the rule checker and the footprint and is listed in the inspector, but it is not drawn in a cell and draws no edges.
+**Tests** are assigned to a domain by its `tests` globs. A test file counts as part of that domain for the rule checker's import rules and the footprint and is listed in the inspector, but it is not drawn in a cell and draws no edges. Tests may write any table: seeding fixture rows is setup, not a product write, so `owns_writes` skips them.
 
 **Edges are derived, never declared.** A cross-domain edge exists when a file in domain A imports a file in domain B. Flow down a column is implied and not drawn. The import parser handles `import … from '…'`, `import('…')` and `export … from '…'`. It resolves relative paths by trying the specifier as written, then `.ts`, `.tsx`, `/index.ts`, `/index.tsx`, and maps a `.js` specifier to `.ts`. It ignores bare package and `node:` imports (Scout has none that matter).
 
@@ -167,7 +167,7 @@ When a fork is answered:
 
 1. Write `decisions/DR-<n>.md` with front matter `{ id, title, outcome, status: made, type: standing, invariant, anchors: { paths }, rejected: "<option B text>" }` and a short rationale body.
 2. Update `domains.yaml`: link the decision to the invariant (option A), or add the path to the invariant's `exceptions` with the DR id (option B). Commit both files and only those (`git commit -- domains.yaml decisions/DR-<n>.md`), so the coding session's uncommitted edits stay out of the commit.
-3. Tell Claude, in the next tool result, to record it in Alike with `mcp__alike__record_decision`: title, outcome, rationale (including the rejected option), type `standing`, and code anchors `{ repository, branch, paths }`. Once at session start, have Claude run Alike's `describe_entity_kind` on `decision` to confirm the field names. Emit `decision_recorded` when the call succeeds.
+3. Tell Claude, in the next tool result, to record it in Alike with `mcp__alike__record_decision`, giving it the exact arguments: `title`, `outcome`, `rationale` (including the rejected option), `decision_type: standing`, `status: made`, and one path anchor per governed file, `{ kind: path, label: governs, path, repository: owner/name }` (field names checked with `describe_entity_kind`, see VERIFY.md). Emit `decision_recorded` when the call succeeds.
 
 Memory is then used three ways:
 
@@ -219,7 +219,7 @@ Copy `scout-agent` at the demo commit. In plain Claude Code, run "Add a tool tha
 | 2 | Server + chat pane | Chatting with Claude Code from the browser works, with responses streaming. |
 | 3 | Grid from the fixture map | Grid renders Scout with derived cross-domain edges; the DR-1 cell is red. |
 | 4 | Live footprint | Reads move the cursor and mark cells; edits fill cells; a new import draws a new edge. |
-| 5 | Plan flow | "Add a tool that summarizes a prospect's latest 10-K" produces ghosts; a gateway bypass in the plan shows red, distinct from the existing DR-1 edge, and Claude asks A/B; answering, approving and building fills the ghosts; anything unplanned ends amber. If Claude plans through the gateway without noticing that redaction mangles the filing's figures, the fork can't happen: note it in `VERIFY.md` and fall back to the edit gate, which fires when it reaches for the provider during the build. |
+| 5 | Plan flow | "Add a tool that summarizes a prospect's latest 10-K. Do it the way news-summarize does, so the figures come through exactly." produces ghosts (the bare prompt usually goes through the gateway with no fork; this one forked 3 of 3 on Scout); a gateway bypass in the plan shows red, distinct from the existing DR-1 edge, and Claude asks A/B; answering, approving and building fills the ghosts; anything unplanned ends amber. If Claude plans through the gateway without noticing that redaction mangles the filing's figures, the fork can't happen: note it in `VERIFY.md` and fall back to the edit gate, which fires when it reaches for the provider during the build. |
 | 6 | Edit gate | An edit that adds a forbidden import is denied and Claude asks. |
 | 7 | Memory | Answering writes the DR file and updates `domains.yaml`; Alike `record_decision` succeeds; edge provenance shows the DR; a fresh session asked to "add a tool that summarizes earnings call transcripts" (served by `vendor/news`) either follows DR-4 without asking, citing it, or gets blocked with "You decided this in DR-4." |
 | 8 | Ledger, summary, replay | Counters match §9; the scrubber replays a full turn. |

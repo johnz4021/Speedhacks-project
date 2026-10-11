@@ -13,7 +13,7 @@ layers:
 
 # Paths that belong to no domain and never create cross-domain edges.
 neutral: ["src/shared/**", "vendor/_calllog.ts"]
-ignore: ["node_modules/**", ".git/**", ".harness/**", "fixtures/**", "scripts/**", "decisions/**"]
+ignore: ["node_modules/**", ".git/**", ".harness/**", "fixtures/**", "scripts/**", "decisions/**", "*.json", "*.md", "*.config.ts", ".*", "domains.yaml"]
 
 domains:
   - id: channels

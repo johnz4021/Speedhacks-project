@@ -1,0 +1,28 @@
+{
+  "name": "@harness/server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "verify": "tsx src/verify.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.296",
+    "@anthropic-ai/sdk": ">=0.93.0",
+    "@harness/core": "*",
+    "@hono/node-server": "^2.1.4",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "chokidar": "^5.0.0",
+    "diff": "^9.0.0",
+    "hono": "^4.13.13",
+    "ws": "^8.22.0",
+    "yaml": "^2.9.1",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/diff": "^7.0.2",
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.18.2",
+    "tsx": "^4.19.2"
+  }
+}

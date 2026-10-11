@@ -363,7 +363,7 @@ The riskiest piece, the gate stopping Claude and Claude asking in chat, sits mid
 | 0:00 | Problem | The 58% and METR numbers | "Writing code got free. Understanding it didn't." |
 | 0:20 | Load | Point it at Scout; files stream into cells; the cartographer proposes 6 domains and 3 rules | "3,000 lines you didn't write; the architecture in ten seconds." |
 | 0:40 | Existing problem | The news summarizer's cell is red: it calls the model provider directly, skipping redaction; the proof script attributes the leaks to that one file | "The map told you where, before you read a line." |
-| 1:00 | Ask, and it plans | "Add a tool that summarizes a prospect's latest 10-K." The cursor moves; ghosts appear; the plan copies the news tool, so its edge to the provider is red | — |
+| 1:00 | Ask, and it plans | "Add a tool that summarizes a prospect's latest 10-K. Do it the way news-summarize does, so the figures come through exactly." The cursor moves; ghosts appear; the plan copies the news tool, so its edge to the provider is red | — |
 | 1:20 | Fork before code | Claude asks A or B; you answer "A, through the gateway" | "Caught before a line was written. Without it, this took *\[baseline\]* minutes to find and fix." |
 | 1:40 | Build | Ghosts fill, diff counts tick, nothing amber | "*\[N\]* lines changed. You checked *\[K\]* cells." |
 | 2:10 | Memory | Fresh session: "add a tool that summarizes earnings calls" plans through the gateway citing DR-4; DR-4 is in Alike | "Session two didn't ask again." |
