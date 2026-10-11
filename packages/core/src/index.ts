@@ -12,3 +12,10 @@ export * from './contracts/facts';
 export * from './contracts/graph';
 export * from './contracts/cartography';
 export type * from './contracts/api';
+// Facts lane (NAVIGATION_PLAN §3.1): Tier 1 extraction is node-only; diffSymbols is browser-safe.
+export { extractFacts, settleCalls, type ExtractContext, type PackageEntry } from './facts/extract';
+export { diffSymbols } from './facts/diff';
+export { createRepoResolver, packageName, workspaceDirs } from './facts/resolver';
+export { packageEntries } from './facts/entries';
+export { normalizeRoutePath } from './facts/routes';
+export { hashText } from './facts/hash';

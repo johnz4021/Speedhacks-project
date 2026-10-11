@@ -11,3 +11,5 @@ export * from './contracts/facts';
 export * from './contracts/graph';
 export * from './contracts/cartography';
 export type * from './contracts/api';
+// Facts lane: which symbols an edit changed.
+export { diffSymbols } from './facts/diff';

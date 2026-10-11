@@ -1,110 +1,12 @@
-const REGEX_PRECEDERS = new Set('(,=:[!&|?{};+-*%<>~^'.split(''));
-const REGEX_KEYWORDS = /(?:^|[^\w$])(?:return|typeof|case|do|else|in|of|void|yield|await|delete|throw|new)$/;
+import { resolverOf } from './facts/context';
+import { moduleRecord } from './facts/record';
+import { packageName } from './facts/resolver';
 
-/**
- * Replace `//` and `/* *\/` comments with spaces (newlines kept), leaving strings,
- * template literals and regex literals intact, so offsets and line numbers still match.
- */
-export function stripComments(src: string): string {
-  const n = src.length;
-  let out = '';
-  let i = 0;
+export { stripComments } from './facts/regex';
 
-  const copyQuoted = (quote: string) => {
-    out += src[i++];
-    while (i < n && src[i] !== quote && src[i] !== '\n') {
-      if (src[i] === '\\') out += src[i++];
-      if (i < n) out += src[i++];
-    }
-    if (i < n && src[i] === quote) out += src[i++];
-  };
-
-  const copyRegex = () => {
-    let inClass = false;
-    out += src[i++];
-    while (i < n && src[i] !== '\n') {
-      const c = src[i]!;
-      if (c === '\\') {
-        out += src.slice(i, i + 2);
-        i += 2;
-        continue;
-      }
-      out += c;
-      i++;
-      if (c === '[') inClass = true;
-      else if (c === ']') inClass = false;
-      else if (c === '/' && !inClass) break;
-    }
-  };
-
-  const copyTemplate = () => {
-    out += src[i++];
-    while (i < n && src[i] !== '`') {
-      if (src[i] === '\\') {
-        out += src.slice(i, i + 2);
-        i += 2;
-      } else if (src[i] === '$' && src[i + 1] === '{') {
-        out += '${';
-        i += 2;
-        code(true);
-      } else out += src[i++];
-    }
-    if (i < n) out += src[i++];
-  };
-
-  // Scan code; when `inTemplate`, stop after the `}` that closes the `${`.
-  function code(inTemplate: boolean) {
-    let depth = 0;
-    while (i < n) {
-      const c = src[i]!;
-      const next = src[i + 1];
-      if (c === '/' && next === '/') {
-        while (i < n && src[i] !== '\n') {
-          out += ' ';
-          i++;
-        }
-      } else if (c === '/' && next === '*') {
-        const end = src.indexOf('*/', i + 2);
-        const stop = end === -1 ? n : end + 2;
-        out += src.slice(i, stop).replace(/[^\n]/g, ' ');
-        i = stop;
-      } else if (c === '"' || c === "'") copyQuoted(c);
-      else if (c === '`') copyTemplate();
-      else if (c === '/') {
-        const before = out.trimEnd();
-        const prev = before[before.length - 1];
-        if (prev === undefined || REGEX_PRECEDERS.has(prev) || REGEX_KEYWORDS.test(before)) copyRegex();
-        else out += src[i++];
-      } else {
-        if (c === '{') depth++;
-        else if (c === '}') {
-          if (inTemplate && depth === 0) {
-            out += src[i++];
-            return;
-          }
-          depth--;
-        }
-        out += src[i++];
-      }
-    }
-  }
-
-  code(false);
-  return out;
-}
-
-const STATIC_FROM = /(?<![\w$.])(?:import|export)\s+(?:type\s+)?[\w$\s{},*]*?\bfrom\s*(['"])([^'"\n]+)\1/g;
-const SIDE_EFFECT = /(?<![\w$.])import\s*(['"])([^'"\n]+)\1/g;
-const DYNAMIC = /(?<![\w$.])import\s*\(\s*(['"`])([^'"`$\n]+)\1\s*\)/g;
-
-/** Module specifiers imported or re-exported by `source`, in source order. Comments are ignored. */
-export function parseImports(source: string): string[] {
-  const code = stripComments(source);
-  const found: { at: number; spec: string }[] = [];
-  for (const re of [STATIC_FROM, SIDE_EFFECT, DYNAMIC]) {
-    for (const m of code.matchAll(re)) found.push({ at: m.index, spec: m[2]! });
-  }
-  return found.sort((a, b) => a.at - b.at).map((f) => f.spec);
+/** Module specifiers imported, re-exported or required by `source`, in source order. Comments are ignored. */
+export function parseImports(source: string, path = 'source.ts'): string[] {
+  return moduleRecord(path, source).specs.map((s) => s.spec);
 }
 
 /** Normalize a repo-relative path: POSIX separators, no `./`, `.`/`..` resolved. Null if it escapes the root. */
@@ -139,11 +41,39 @@ export function resolvePath(path: string, exists: (path: string) => boolean): st
   return candidates.find((c) => exists(c)) ?? null;
 }
 
-/** Resolve a relative specifier imported by `fromFile` to an existing repo file. Bare and `node:` specifiers give null. */
+/**
+ * Resolve a specifier imported by `fromFile` to a repo path, `vendor:<pkg>` (a package or `vendor:node:<x>` builtin), or null.
+ * If `exists` carries a repo resolver (`fileExistsIn`, `withExtra`), files on disk resolve through oxc-resolver (tsconfig
+ * paths, package exports/imports, workspaces), and files that `exists` knows but disk doesn't (a plan's new files) through
+ * relative paths and tsconfig `paths`. Without one, only relative specifiers resolve.
+ */
+export function resolveSpecifier(fromFile: string, specifier: string, exists: (path: string) => boolean): string | null {
+  const from = normalizePath(fromFile) ?? fromFile;
+  const repo = resolverOf(exists);
+  if (isRelative(specifier)) {
+    const hit = repo?.resolve(from, specifier);
+    if (hit && !hit.startsWith('vendor:')) return hit;
+    const dir = dirname(from);
+    return resolvePath(dir ? `${dir}/${specifier}` : specifier, exists);
+  }
+  if (!repo) return null;
+  const hit = repo.resolve(from, specifier);
+  if (hit && !hit.startsWith('vendor:')) return hit;
+  const { bases, alias } = repo.candidates(from, specifier);
+  for (const base of bases) {
+    const p = resolvePath(base, exists);
+    if (p) return p;
+  }
+  if (hit) return hit;
+  if (alias || specifier.startsWith('#')) return null; // an alias or package import, not a package
+  const pkg = packageName(specifier);
+  return pkg ? `vendor:${pkg}` : null;
+}
+
+/** Resolve a specifier imported by `fromFile` to an existing (or planned) repo file. Packages, builtins and misses give null. */
 export function resolveImport(fromFile: string, specifier: string, exists: (path: string) => boolean): string | null {
-  if (!isRelative(specifier)) return null;
-  const dir = dirname(normalizePath(fromFile) ?? '');
-  return resolvePath(dir ? `${dir}/${specifier}` : specifier, exists);
+  const to = resolveSpecifier(fromFile, specifier, exists);
+  return to && !to.startsWith('vendor:') ? to : null;
 }
 
 export function isRelative(specifier: string): boolean {
