@@ -28,7 +28,7 @@ describe('schema extensions', () => {
     const yaml = mapYaml.replace(
       'logic:    { paths: ["src/tools/**"] }',
       'logic:    { paths: ["src/tools/**"], components: [{ id: news, name: News, paths: ["src/tools/news-*.ts"] }] }',
-    ) + '\ncartography:\n  thresholds: { wideTurnsMedian: 4 }\n';
+    ).replace('cartography:\n', 'cartography:\n  thresholds: { wideTurnsMedian: 4 }\n');
     const map = parseDomainMap(yaml);
     expect(map.domains.find((d) => d.id === 'tools')!.cells.logic!.components![0]!.name).toBe('News');
     expect(map.cartography?.thresholds?.wideTurnsMedian).toBe(4);
