@@ -58,3 +58,16 @@ export type DetectDrift = (
   previous?: readonly DriftSignal[],
 ) => DriftSignal[];
 export type DiffMaps = (current: DomainMap, next: DomainMap, files: readonly string[]) => ProposalChange[];
+
+// ---- Beat 1: the three classes of path to a model provider (shared by the `overview` graph tool and the trace UI) ----
+/** `gateway`: through the gateway domain (the design). `violation`: crosses a current invariant (red).
+ *  `uncosted`: reaches the provider SDK outside the gateway without breaking a rule (amber). */
+export type ProviderPathClass = 'gateway' | 'violation' | 'uncosted';
+export type ProviderPath = {
+  class: ProviderPathClass;
+  nodes: string[]; // graph node ids from the caller to the provider sink
+  provider: string; // the provider sink node (e.g. `vendor/llm-anthropic/index.ts#Anthropic` or `vendor:@anthropic-ai/sdk`)
+  invariant?: string; // for `violation`: the invariant crossed
+};
+/** Deterministic; implemented in packages/core/src/journeys/provider-paths.ts (wave 3 lane C). */
+export type ProviderPaths = (graph: ContextGraph, map: DomainMap, violations: readonly import('../rules').Violation[]) => ProviderPath[];
