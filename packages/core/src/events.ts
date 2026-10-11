@@ -20,7 +20,9 @@ export type EventKind =
   // NAVIGATION_PLAN: per-file facts for the context graph, and the living map (§3.1, §4.7).
   | 'facts_changed' | 'facts_resolved' | 'call_added' | 'call_removed'
   | 'drift_detected' | 'map_proposal_resolved' | 'labels_updated'
-  | 'audit_finding' | 'audit_resolved' | 'maintenance_run' | 'journeys_updated' | 'decision_touched';
+  | 'audit_finding' | 'audit_resolved' | 'maintenance_run' | 'journeys_updated' | 'decision_touched'
+  // The agent acting on the map (map-first conversation): notes pinned to nodes, paths it points at, camera hints.
+  | 'annotation' | 'highlight' | 'focus';
 
 export type HarnessEvent = {
   id: string;
@@ -85,6 +87,12 @@ export type EventData = {
   audit_resolved: { id: string; outcome: AuditOutcome };
   maintenance_run: { agent: 'cartographer' | 'auditor'; trigger: string; ms: number; cost: number | null; ok: boolean };
   journeys_updated: { journeys: Journey[] }; // the full current set (replaces)
+  /** The agent pins a short note on a node (via an MCP tool); `id` lets it replace or clear (`text: ''`) its own note. */
+  annotation: { id: string; node: string; text: string; tone: 'note' | 'finding' | 'question' };
+  /** The agent points at nodes/edges to show the user something (replaces the turn's previous highlight; empty clears). */
+  highlight: { nodes: string[]; edges: { from: string; to: string }[]; label: string };
+  /** The agent asks the camera to look somewhere (a hint; Follow mode honours it, manual navigation wins). */
+  focus: { node: string; reason: string };
   /** A plan step or an edit touches code a standing decision protects (deterministic path/symbol match). */
   decision_touched: { decision: string; principle: string; paths: string[]; symbols: string[]; source: 'plan' | 'edit'; step?: number };
 };
@@ -120,6 +128,9 @@ export type TurnState = {
   avoided: { from: string; to: string; decision: string; reason: string }[];
   /** Protected code this turn's plan or edits touched (beat 4): shown as decision markers and on the approval card. */
   touched: EventData['decision_touched'][];
+  /** The agent's notes on the map this turn (by note id) and its current highlight. */
+  annotations: Record<string, EventData['annotation']>;
+  highlight: EventData['highlight'] | null;
   /** Leaf-level activity (for the context graph): path → what happened to that file this turn. */
   paths: Record<string, PathActivity>;
   callsAdded: { from: string; to: string }[];
@@ -176,7 +187,7 @@ function newTurn(id: string, prompt: string, t: number): TurnState {
   return {
     id, prompt, startedAt: t, endedAt: null, steps: [], planned: {}, plannedEdges: {}, planViolations: [], gateBlocks: [], violationsSeen: [],
     looked: {}, edited: {}, tests: {}, unassigned: [], edgesAdded: [], edgesRemoved: [], forks: [], decisions: [],
-    approved: false, firstEditAt: null, numstat: null, paths: {}, callsAdded: [], callsRemoved: [], avoided: [], touched: [],
+    approved: false, firstEditAt: null, numstat: null, paths: {}, callsAdded: [], callsRemoved: [], avoided: [], touched: [], annotations: {}, highlight: null,
   };
 }
 
@@ -276,6 +287,20 @@ export function apply(s: UIState, e: HarnessEvent, index: number): UIState {
       if (f) f.status = r.outcome;
       break;
     }
+    case 'annotation': {
+      const a = d as EventData['annotation'];
+      if (!turn) break;
+      if (a.text) turn.annotations[a.id] = a;
+      else delete turn.annotations[a.id];
+      break;
+    }
+    case 'highlight': {
+      const h = d as EventData['highlight'];
+      if (turn) turn.highlight = h.nodes.length || h.edges.length ? h : null;
+      break;
+    }
+    case 'focus':
+      break; // view hint only; the shell's Follow mode reads it from the log
     case 'decision_touched': {
       const t = d as EventData['decision_touched'];
       if (turn && !turn.touched.some((x) => x.decision === t.decision && x.source === t.source && x.step === t.step && x.paths.join() === t.paths.join() && x.symbols.join() === t.symbols.join())) turn.touched.push(t);
