@@ -8,3 +8,7 @@ export * from './plan';
 export * from './mapedit';
 export * from './events';
 export * from './ledger';
+export * from './contracts/facts';
+export * from './contracts/graph';
+export * from './contracts/cartography';
+export type * from './contracts/api';

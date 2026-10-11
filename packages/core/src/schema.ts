@@ -3,9 +3,19 @@ import YAML from 'yaml';
 
 const LayerSchema = z.object({ id: z.string(), name: z.string() });
 
+/** A confirmed sub-group inside a cell (promoted from an inferred cartographer label). */
+const ComponentSchema = z.object({ id: z.string(), name: z.string(), paths: z.array(z.string()) });
+
 const CellSchema = z.object({
   paths: z.array(z.string()).optional(),
   tables: z.array(z.string()).optional(),
+  components: z.array(ComponentSchema).optional(),
+});
+
+/** Living-map settings (NAVIGATION_PLAN §4.4). Missing thresholds fall back to DEFAULT_THRESHOLDS. */
+const CartographySchema = z.object({
+  thresholds: z.record(z.string(), z.number()).optional(),
+  routes: z.array(z.object({ file: z.string(), pattern: z.string() })).optional(), // custom router patterns
 });
 
 const DomainSchema = z.object({
@@ -57,6 +67,7 @@ export const DomainMapSchema = z
     ignore: z.array(z.string()).optional(),
     domains: z.array(DomainSchema),
     invariants: z.array(InvariantSchema).default([]),
+    cartography: CartographySchema.optional(),
   })
   .superRefine((map, ctx) => {
     const layers = new Set(map.layers.map((l) => l.id));

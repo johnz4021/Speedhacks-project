@@ -6,3 +6,8 @@ export type { Placement } from './mapper';
 export type { ImportEdge, WriteFact, DomainEdge } from './facts';
 export type { Violation } from './rules';
 export type { PlanStep } from './plan';
+// NAVIGATION_PLAN contracts (types and id helpers; browser-safe).
+export * from './contracts/facts';
+export * from './contracts/graph';
+export * from './contracts/cartography';
+export type * from './contracts/api';

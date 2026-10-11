@@ -3,6 +3,8 @@ import type { Placement } from './mapper';
 import type { ImportEdge, WriteFact, DomainEdge } from './facts';
 import type { Violation } from './rules';
 import type { PlanStep } from './plan';
+import type { FileFacts, SemanticFacts, SymbolDiff, CallConfidence } from './contracts/facts';
+import type { AuditFinding, AuditOutcome, DriftSignal, Label, MapProposal, ProposalOutcome } from './contracts/cartography';
 
 export type Cell = { domain: string; layer: string };
 
@@ -14,7 +16,11 @@ export type EventKind =
   | 'gate_blocked' | 'edited' | 'edge_added' | 'edge_removed'
   | 'test_result' | 'decision_recorded' | 'turn_ended'
   // Additions to SPEC §5 so the chat pane and approval button are also reductions of the log.
-  | 'chat' | 'approval_requested' | 'error';
+  | 'chat' | 'approval_requested' | 'error'
+  // NAVIGATION_PLAN: per-file facts for the context graph, and the living map (§3.1, §4.7).
+  | 'facts_changed' | 'facts_resolved' | 'call_added' | 'call_removed'
+  | 'drift_detected' | 'map_proposal_resolved' | 'labels_updated'
+  | 'audit_finding' | 'audit_resolved' | 'maintenance_run';
 
 export type HarnessEvent = {
   id: string;
@@ -29,8 +35,10 @@ export type HarnessEvent = {
 
 /** Typed payloads, by kind. The server builds events with `ev()`; the reducer reads them back. */
 export type EventData = {
-  repo_scanned: { files: { path: string; placement: Placement }[]; imports: ImportEdge[]; writes: WriteFact[]; edges: DomainEdge[] };
-  map_proposed: { map: DomainMap; yaml: string };
+  /** `fileFacts` (Tier 1, every code file) is optional for older logs; without it facts are derived from imports/writes. */
+  repo_scanned: { files: { path: string; placement: Placement }[]; imports: ImportEdge[]; writes: WriteFact[]; edges: DomainEdge[]; fileFacts?: FileFacts[] };
+  /** Onboarding proposal when `proposal` is absent (sets the map). A living-map proposal (`proposal` set) never changes the map until accepted. */
+  map_proposed: { map: DomainMap; yaml: string; proposal?: MapProposal };
   map_confirmed: { map: DomainMap; source: 'file' | 'cartographer' | 'fixture' };
   file_assigned: { placement: Placement };
   violation_found: { violations: Violation[] }; // the full current set (replaces)
@@ -48,7 +56,7 @@ export type EventData = {
   fork_answered: { option: 'A' | 'B'; text: string; violations: Violation[] };
   plan_approved: Record<string, never>;
   gate_blocked: { violation: Violation; tool: string };
-  edited: { added: number; removed: number; created: boolean; unattributed?: boolean; tool?: string };
+  edited: { added: number; removed: number; created: boolean; unattributed?: boolean; tool?: string; symbols?: SymbolDiff };
   edge_added: { edge: ImportEdge; from: string; to: string };
   edge_removed: { edge: ImportEdge; from: string; to: string };
   test_result: { domain: string; passed: number; failed: number };
@@ -57,6 +65,18 @@ export type EventData = {
   chat: { role: 'user' | 'assistant' | 'system'; text: string };
   approval_requested: { plan: string };
   error: { message: string };
+  /** A file's Tier 1 facts after it changed (null = deleted). Emitted with every `edited`/`file_assigned`. */
+  facts_changed: { facts: FileFacts | null };
+  /** Tier 2 typed facts; ignored unless `hash` matches the file's current facts. */
+  facts_resolved: { facts: SemanticFacts };
+  call_added: { from: string; to: string; confidence: CallConfidence };
+  call_removed: { from: string; to: string; confidence: CallConfidence };
+  drift_detected: { signals: DriftSignal[] }; // the full current set (replaces)
+  map_proposal_resolved: { proposal: string; outcome: ProposalOutcome; decision?: string };
+  labels_updated: { labels: Label[] }; // upserts by (target, kind)
+  audit_finding: { finding: AuditFinding };
+  audit_resolved: { id: string; outcome: AuditOutcome };
+  maintenance_run: { agent: 'cartographer' | 'auditor'; trigger: string; ms: number; cost: number | null; ok: boolean };
 };
 
 export const cellKey = (c: Cell) => `${c.domain}/${c.layer}`;
@@ -87,7 +107,16 @@ export type TurnState = {
   approved: boolean;
   firstEditAt: number | null; // event index of first `edited`
   numstat: { added: number; removed: number } | null;
+  /** Leaf-level activity (for the context graph): path → what happened to that file this turn. */
+  paths: Record<string, PathActivity>;
+  callsAdded: { from: string; to: string }[];
+  callsRemoved: { from: string; to: string }[];
 };
+
+export type PathActivity = { looked: boolean; added: number; removed: number; created: boolean; unattributed: boolean; edits: number; symbols: SymbolDiff | null };
+
+export type ProposalState = { proposal: MapProposal; status: 'pending' | ProposalOutcome; at: number; decision?: string };
+export type FindingState = AuditFinding & { status: 'open' | AuditOutcome; turn: string | null; at: number };
 
 export type DomainEdgeState = { from: string; to: string; files: ImportEdge[] };
 
@@ -109,12 +138,21 @@ export type UIState = {
   /** event index → provenance lookups */
   edgeOrigin: Record<string, { turn: string | null; at: number }[]>;
   cellOrigin: Record<string, { turn: string | null; at: number }[]>;
+  /** Tier 1 facts per file, and Tier 2 facts whose hash still matches. */
+  facts: Record<string, FileFacts>;
+  semantic: Record<string, SemanticFacts>;
+  drift: DriftSignal[];
+  proposals: Record<string, ProposalState>;
+  labels: Record<string, Label>; // key: `${kind}:${target}`
+  findings: Record<string, FindingState>;
+  maintenance: (EventData['maintenance_run'] & { t: number })[];
 };
 
 export function initialState(): UIState {
   return {
     map: null, files: {}, edges: {}, violations: [], turns: [], current: null, cursor: null, chat: [],
     awaitingApproval: null, pendingFork: null, decisions: [], errors: [], edgeOrigin: {}, cellOrigin: {},
+    facts: {}, semantic: {}, drift: [], proposals: {}, labels: {}, findings: {}, maintenance: [],
   };
 }
 
@@ -122,11 +160,30 @@ function newTurn(id: string, prompt: string, t: number): TurnState {
   return {
     id, prompt, startedAt: t, endedAt: null, steps: [], planned: {}, plannedEdges: {}, planViolations: [], gateBlocks: [], violationsSeen: [],
     looked: {}, edited: {}, tests: {}, unassigned: [], edgesAdded: [], edgesRemoved: [], forks: [], decisions: [],
-    approved: false, firstEditAt: null, numstat: null,
+    approved: false, firstEditAt: null, numstat: null, paths: {}, callsAdded: [], callsRemoved: [],
   };
 }
 
 const push = <T>(rec: Record<string, T[]>, k: string, v: T) => { (rec[k] ??= []).push(v); };
+
+const pathActivity = (t: TurnState, path: string): PathActivity =>
+  (t.paths[path] ??= { looked: false, added: 0, removed: 0, created: false, unattributed: false, edits: 0, symbols: null });
+
+const union = (a: string[], b: string[]) => [...new Set([...a, ...b])];
+
+function mergeSymbols(a: SymbolDiff | null, b: SymbolDiff): SymbolDiff {
+  if (!a) return { added: [...b.added], removed: [...b.removed], sig: [...b.sig], body: [...b.body], renamed: [...b.renamed] };
+  return { added: union(a.added, b.added), removed: union(a.removed, b.removed), sig: union(a.sig, b.sig), body: union(a.body, b.body), renamed: [...a.renamed, ...b.renamed] };
+}
+
+/** Facts for a scan from an older log without `fileFacts`: imports and writes only. */
+function factsFromScan(scan: EventData['repo_scanned']): Record<string, FileFacts> {
+  const out: Record<string, FileFacts> = {};
+  const get = (path: string) => (out[path] ??= { path, hash: '', imports: [], writes: [], symbols: [], calls: [], routes: [], entries: [] });
+  for (const i of scan.imports) get(i.from).imports.push({ to: i.to, typeOnly: false });
+  for (const w of scan.writes) get(w.file).writes.push({ table: w.table, symbol: null, via: 'db' });
+  return out;
+}
 
 /** Fold one event into the state. Mutates and returns `s`; callers that need immutability use `reduce`. */
 export function apply(s: UIState, e: HarnessEvent, index: number): UIState {
@@ -134,20 +191,77 @@ export function apply(s: UIState, e: HarnessEvent, index: number): UIState {
   const d = (e.data ?? {}) as never;
 
   switch (e.kind) {
-    case 'map_confirmed':
+    case 'map_confirmed': {
+      s.map = (d as EventData['map_confirmed']).map;
+      break;
+    }
     case 'map_proposed': {
-      const { map } = d as EventData['map_confirmed'];
-      s.map = map;
+      const p = d as EventData['map_proposed'];
+      if (p.proposal) s.proposals[p.proposal.id] = { proposal: p.proposal, status: 'pending', at: index };
+      else s.map = p.map;
       break;
     }
     case 'repo_scanned': {
-      const { files, edges } = d as EventData['repo_scanned'];
+      const scan = d as EventData['repo_scanned'];
       s.files = {};
-      for (const f of files) s.files[f.path] = f.placement;
+      for (const f of scan.files) s.files[f.path] = f.placement;
       s.edges = {};
-      for (const ed of edges) s.edges[edgeKey(ed.from, ed.to)] = { from: ed.from, to: ed.to, files: [...ed.files] };
+      for (const ed of scan.edges) s.edges[edgeKey(ed.from, ed.to)] = { from: ed.from, to: ed.to, files: [...ed.files] };
+      if (scan.fileFacts) {
+        s.facts = {};
+        for (const f of scan.fileFacts) s.facts[f.path] = f;
+      } else {
+        s.facts = factsFromScan(scan);
+      }
+      s.semantic = {};
       break;
     }
+    case 'facts_changed': {
+      const { facts } = d as EventData['facts_changed'];
+      const path = facts?.path ?? e.path;
+      if (!path) break;
+      if (facts) s.facts[path] = facts;
+      else delete s.facts[path];
+      if (s.semantic[path] && s.semantic[path]!.hash !== facts?.hash) delete s.semantic[path];
+      break;
+    }
+    case 'facts_resolved': {
+      const { facts } = d as EventData['facts_resolved'];
+      if (s.facts[facts.path]?.hash === facts.hash) s.semantic[facts.path] = facts;
+      break;
+    }
+    case 'call_added':
+    case 'call_removed': {
+      const { from, to } = d as EventData['call_added'];
+      (e.kind === 'call_added' ? turn?.callsAdded : turn?.callsRemoved)?.push({ from, to });
+      break;
+    }
+    case 'drift_detected':
+      s.drift = (d as EventData['drift_detected']).signals;
+      break;
+    case 'map_proposal_resolved': {
+      const r = d as EventData['map_proposal_resolved'];
+      const p = s.proposals[r.proposal];
+      if (p) { p.status = r.outcome; if (r.decision) p.decision = r.decision; }
+      break;
+    }
+    case 'labels_updated':
+      for (const l of (d as EventData['labels_updated']).labels) s.labels[`${l.kind}:${l.target}`] = l;
+      break;
+    case 'audit_finding': {
+      const { finding } = d as EventData['audit_finding'];
+      s.findings[finding.id] = { ...finding, status: 'open', turn: e.turn, at: index };
+      break;
+    }
+    case 'audit_resolved': {
+      const r = d as EventData['audit_resolved'];
+      const f = s.findings[r.id];
+      if (f) f.status = r.outcome;
+      break;
+    }
+    case 'maintenance_run':
+      s.maintenance.push({ ...(d as EventData['maintenance_run']), t: e.t });
+      break;
     case 'file_assigned': {
       if (e.path) s.files[e.path] = (d as EventData['file_assigned']).placement;
       break;
@@ -170,6 +284,7 @@ export function apply(s: UIState, e: HarnessEvent, index: number): UIState {
     case 'looked':
     case 'cursor': {
       if (e.path) s.cursor = { cell: e.cell ?? null, path: e.path, verb: e.kind === 'cursor' ? (d as EventData['cursor']).verb : 'reading' };
+      if (e.kind === 'looked' && turn && e.path) pathActivity(turn, e.path).looked = true;
       if (e.kind === 'looked' && turn && e.cell && e.path) {
         const k = cellKey(e.cell);
         const list = (turn.looked[k] ??= []);
@@ -227,6 +342,13 @@ export function apply(s: UIState, e: HarnessEvent, index: number): UIState {
       if (s.cursor && e.path && !ed.unattributed) s.cursor = { cell: e.cell ?? null, path: e.path, verb: 'editing' };
       if (!turn || !e.path) break;
       if (turn.firstEditAt === null) turn.firstEditAt = index;
+      const pa = pathActivity(turn, e.path);
+      pa.added += ed.added;
+      pa.removed += ed.removed;
+      pa.edits += 1;
+      if (ed.created) pa.created = true;
+      if (ed.unattributed) pa.unattributed = true;
+      if (ed.symbols) pa.symbols = mergeSymbols(pa.symbols, ed.symbols);
       const placement = s.files[e.path];
       if (placement?.kind === 'test') { push(turn.tests, placement.domain, e.path); break; }
       if (!e.cell) { if (!turn.unassigned.includes(e.path)) turn.unassigned.push(e.path); break; }
