@@ -70,3 +70,21 @@ describe('ledger: avoided approaches', () => {
     expect(l.turns.at(-1)!.rejectedOptionsBlocked).toBe(1);
   });
 });
+
+describe('ledger: a recorded live run of demo beats 3 and 4 (real Claude, fresh Scout copy)', () => {
+  // packages/core/test/fixtures/beats-3-4.events.json: beat 3 forks on DR-3 and records DR-4; beat 4, in a new session,
+  // plans the decided way and lists the research tool as avoided per DR-4.
+  it('counts one fork caught before code and one rejected option blocked, and draws the rejected edge', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { graphOf, activityFor, project } = await import('../src/graph');
+    const events = JSON.parse(readFileSync(new URL('./fixtures/beats-3-4.events.json', import.meta.url), 'utf8')) as HarnessEvent[];
+    const ui = reduce(events);
+    const l = ledger(ui);
+    expect(ui.sessions).toHaveLength(2);
+    expect(l.turns.map((t) => [t.forksCaughtBeforeCode, t.rejectedOptionsBlocked])).toEqual([[1, 0], [0, 1]]);
+    expect(l.session).toMatchObject({ forksCaughtBeforeCode: 1, rejectedOptionsBlocked: 1 });
+    const g = graphOf(ui);
+    const p = project(g, { expanded: [], focus: null, lens: { kinds: [], turnOnly: false }, budget: 25, follow: false }, activityFor(ui, g, ui.turns.at(-1)!.id));
+    expect(p.edges.filter((e) => e.decision).map((e) => [e.from, e.to, e.decision!.id, e.decision!.session])).toEqual([['domain:tools', 'domain:outreach', 'DR-4', 1]]);
+  });
+});
