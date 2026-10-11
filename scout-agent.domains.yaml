@@ -1,0 +1,93 @@
+# Reference map for the Scout demo repo.
+# Live, the cartographer proposes this on load and the user confirms it.
+# This copy is the test fixture for packages/core and the fallback if the
+# cartographer's proposal is off on stage.
+
+version: 1
+
+layers:
+  - { id: entry,    name: Entry }
+  - { id: logic,    name: Logic }
+  - { id: data,     name: Data }
+  - { id: external, name: External }
+
+# Paths that belong to no domain and never create cross-domain edges.
+neutral: ["src/shared/**", "vendor/_calllog.ts"]
+ignore: ["node_modules/**", ".git/**", ".harness/**", "fixtures/**", "scripts/**", "decisions/**"]
+
+domains:
+  - id: channels
+    name: Channels
+    purpose: Take requests from HTTP and the CLI
+    cells:
+      entry: { paths: ["src/channels/routes.ts", "src/channels/cli.ts"] }
+      logic: { paths: ["src/channels/validate.ts"] }
+    tests: ["test/channels/**"]
+
+  - id: orchestrator
+    name: Agent loop
+    purpose: Plan each run and call tools in order
+    cells:
+      logic: { paths: ["src/orchestrator/agent.ts", "src/orchestrator/planner.ts", "src/orchestrator/tool-registry.ts"] }
+      data:  { paths: ["src/orchestrator/run-state.ts"], tables: ["runs"] }
+    tests: ["test/orchestrator/**"]
+
+  - id: tools
+    name: Research tools
+    purpose: Look up companies, news and filings
+    cells:
+      logic:    { paths: ["src/tools/**"] }
+      external: { paths: ["vendor/search/**", "vendor/news/**", "vendor/sec-edgar/**", "vendor/enrichment/**"] }
+    tests: ["test/tools/**"]
+
+  - id: gateway
+    name: Model gateway
+    purpose: Every model call, with redaction and cost logging
+    cells:
+      logic:    { paths: ["src/gateway/complete.ts", "src/gateway/embed.ts", "src/gateway/redact.ts", "src/gateway/providers.ts"] }
+      data:     { paths: ["src/gateway/cost-ledger.ts"], tables: ["cost_log"] }
+      external: { paths: ["vendor/llm-openai/**", "vendor/llm-anthropic/**", "vendor/embeddings/**"] }
+    tests: ["test/gateway/**"]
+
+  - id: memory
+    name: Memory
+    purpose: Store and retrieve notes about each company
+    cells:
+      logic: { paths: ["src/memory/retrieve.ts", "src/memory/vector-index.ts"] }
+      data:  { paths: ["src/memory/notes-store.ts"], tables: ["notes", "embeddings"] }
+    tests: ["test/memory/**"]
+
+  - id: outreach
+    name: Outreach
+    purpose: Draft emails and keep the CRM in sync
+    cells:
+      logic:    { paths: ["src/outreach/draft-email.ts", "src/outreach/send.ts"] }
+      data:     { paths: ["src/outreach/crm-sync.ts", "src/outreach/outreach-log.ts"], tables: ["contacts", "outreach_log"] }
+      external: { paths: ["vendor/crm/**", "vendor/email/**"] }
+    tests: ["test/outreach/**"]
+
+# Seeded by the cartographer on load (source: cartographer), confirmed by the user.
+# Runtime decisions get the next free id (DR-4, DR-5, ...) and live in decisions/.
+invariants:
+  - id: DR-1
+    rule: Model providers are only called through the model gateway
+    kind: only_via
+    targets: ["vendor/llm-*/**", "vendor/embeddings/**"]
+    allowed_from: [gateway]
+    exceptions: []
+    source: cartographer
+
+  - id: DR-2
+    rule: Each table is written only by the domain that owns it
+    kind: owns_writes
+    owners: { runs: orchestrator, cost_log: gateway, notes: memory, embeddings: memory, contacts: outreach, outreach_log: outreach }
+    exceptions: []
+    source: cartographer
+
+  - id: DR-3
+    rule: Research tools never depend on outreach
+    kind: no_edge
+    from: tools
+    to: outreach
+    exceptions: []
+    source: cartographer
