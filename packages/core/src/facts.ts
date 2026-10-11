@@ -185,7 +185,7 @@ export function symbolNames(facts: Readonly<Record<string, FileFacts>>): (file: 
   };
 }
 
-/** `scanRepo` plus Tier 1 `FileFacts` for every code file, calls settled against the whole repo. */
+/** `scanRepo` plus Tier 1 `FileFacts` for every code and `.sql` file, calls settled against the whole repo. */
 export function scanRepoFacts(root: string, map: DomainMap): Facts & { fileFacts: Record<string, FileFacts> } {
   const files = listRepoFiles(root, map);
   const exists = scanExists(root, files);
@@ -207,6 +207,10 @@ export function scanRepoFacts(root: string, map: DomainMap): Facts & { fileFacts
   const writes: WriteFact[] = [];
   const fileFacts: Record<string, FileFacts> = {};
   for (const file of files) {
+    if (file.endsWith('.sql')) {
+      fileFacts[file] = index.extract(file, read(file)!).facts; // schema tables, no imports
+      continue;
+    }
     if (!isCodeFile(file)) continue;
     const source = read(file)!;
     fileFacts[file] = index.extract(file, source).facts; // first: it leaves the record cached for the gate facts

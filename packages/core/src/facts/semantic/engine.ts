@@ -8,6 +8,7 @@ import type { SemanticResolver } from './types';
 
 /** At most this many importers are re-resolved after an edit (their typed targets may have moved). */
 export const MAX_IMPORTERS = 100;
+const CODE = /\.[cm]?[jt]sx?$/;
 
 export class SemanticEngine {
   private facts = new Map<string, FileFacts>();
@@ -49,7 +50,8 @@ export class SemanticEngine {
       this.facts.delete(p);
       this.last.delete(p);
     }
-    this.resolver.update({ changed: changed.filter((f) => !created.includes(f.path)).map((f) => f.path), created, deleted });
+    const code = (p: string) => CODE.test(p);
+    this.resolver.update({ changed: changed.filter((f) => !created.includes(f.path)).map((f) => f.path).filter(code), created: created.filter(code), deleted: deleted.filter(code) });
     const touched = new Set([...changed.map((f) => f.path), ...deleted]);
     const importers: string[] = [];
     for (const f of this.facts.values()) {
@@ -63,7 +65,7 @@ export class SemanticEngine {
   /** Resolve one file against its current text; emits when the result differs from what was last reported. */
   resolve(path: string): ResolveStats | null {
     const facts = this.facts.get(path);
-    if (!facts) return null;
+    if (!facts || !CODE.test(path)) return null; // schema .sql files have Tier 1 facts only
     let source: string;
     try {
       source = readFileSync(join(this.root, path), 'utf8');

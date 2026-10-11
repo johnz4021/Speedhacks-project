@@ -7,6 +7,7 @@ import { hashText, squash } from './hash';
 import { BULK_MIN, isMinified, parseModule, parseName, remember, type ModuleRecord } from './record';
 import { packageName } from './resolver';
 import { nextRoutes, routeFact } from './routes';
+import { findReads, sqlFacts } from './tables';
 
 /** `(from, spec)` → repo path, `vendor:<pkg>`, or null (unresolved). */
 export type Resolve = (from: string, spec: string) => string | null;
@@ -29,13 +30,17 @@ export type ExtractContext = {
 /** Reads CLI arguments (`process.argv.slice(2)`, `argv[2]`, `parseArgs(…)`), not just the `argv[1]` is-main check. */
 const READS_ARGS = /\bprocess\s*\.\s*argv\s*(?:\.\s*(?:slice|includes|indexOf|filter|find)\b|\[\s*[2-9])|\bparseArgs\s*\(/;
 
-/** Tier 1 facts for `path`. Large (> ~500 KB) or minified files get imports, writes and file routes only. */
+/**
+ * Tier 1 facts for `path`. Large (> ~500 KB) or minified files get imports, writes, reads and file routes only;
+ * `.sql` files get the tables they create (with columns).
+ */
 export function extractFacts(path: string, source: string, resolve: Resolve, ctx: ExtractContext = {}): FileFacts {
   return extract(path, source, resolve, ctx).facts;
 }
 
 /** `extractFacts`, plus whether the source parsed (when it didn't, symbols and calls are empty, not "all removed"). */
 export function extract(path: string, source: string, resolve: Resolve, ctx: ExtractContext = {}): { facts: FileFacts; parsed: boolean } {
+  if (path.endsWith('.sql')) return { facts: sqlFacts(path, source), parsed: true };
   const { record, parsed } = parseModule(path, source);
   remember(path, source, record);
   const facts: FileFacts = { path, hash: hashText(source), imports: [], writes: [], symbols: [], calls: [], routes: [], entries: [] };
@@ -81,6 +86,12 @@ export function extract(path: string, source: string, resolve: Resolve, ctx: Ext
     writes.set(`${site.table}\u0000${site.symbol}\u0000${site.via}`, site);
   }
   facts.writes = [...writes.values()];
+  const reads = new Map<string, WriteSite>();
+  for (const hit of findReads(code)) {
+    const site = { table: hit.table, symbol: w.innermost(hit.at), via: hit.via };
+    reads.set(`${site.table}\u0000${site.symbol}\u0000${site.via}`, site);
+  }
+  facts.reads = [...reads.values()];
 
   const entries = new Map<string, EntryFact>();
   const entry = (kind: EntryFact['kind'], label: string, symbol: string | null) =>

@@ -273,16 +273,17 @@ export class Repo {
 
     // Import and write facts for this one file.
     const code = CODE.test(path);
+    const schema = path.endsWith('.sql'); // Tier 1 tables only; no gate facts
     // Tier 1 first: its parse leaves the import/write record cached for the gate facts below.
-    const tier1 = code ? this.refreshFacts(path, deleted ? null : next) : null;
+    const tier1 = code || schema ? this.refreshFacts(path, deleted ? null : next) : null;
     const names = (f: FileFacts | null | undefined) => (f ? f.symbols.map((x) => x.name).sort().join('\n') : null);
     // (Mid-edit text that doesn't parse keeps its old shape: no relink churn.)
-    const shapeChanged = !!tier1?.parsed && (names(tier1.prev) !== names(tier1.next) || exportShape(path, prev) !== exportShape(path, deleted ? null : next));
+    const shapeChanged = code && !!tier1?.parsed && (names(tier1.prev) !== names(tier1.next) || exportShape(path, prev) !== exportShape(path, deleted ? null : next));
     const before = this.facts.imports.filter((i) => i.from === path);
     const after = code && !deleted ? factsForSource(path, next, this.exists) : { imports: [], writes: [] };
     this.facts.imports = [...this.facts.imports.filter((i) => i.from !== path), ...after.imports];
     this.facts.writes = [...this.facts.writes.filter((w) => w.file !== path), ...after.writes];
-    if (deleted) this.contents.delete(path); else if (code) this.contents.set(path, next);
+    if (deleted) this.contents.delete(path); else if (code || schema) this.contents.set(path, next);
 
     // Which symbols changed; the file's new facts follow right after `edited`.
     const symbols: SymbolDiff | undefined = tier1 ? diffSymbols(tier1.prev?.symbols ?? [], tier1.next?.symbols ?? []) : undefined;

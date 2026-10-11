@@ -30,3 +30,4 @@ export { openResolver, type ResolverChoice } from './facts/semantic/open';
 export { semanticFacts, type ResolveStats } from './facts/semantic/resolve';
 export type { DeclInfo, ResolverImpl, SemanticResolver } from './facts/semantic/types';
 export { moduleRecord, type ModuleRecord } from './facts/record';
+export { findReads, parseSqlTables, sqlFacts } from './facts/tables';

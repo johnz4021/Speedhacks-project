@@ -13,6 +13,22 @@ export function violationText(vs: Violation[]): string {
   return vs.map((v) => `${v.reason}\n  (A) ${v.options[0]}\n  (B) ${v.options[1]}`).join('\n');
 }
 
+/**
+ * Beat 4: a violation of an invariant with a linked decision is not a fork. Claude is told what was decided and to
+ * plan that way, never to ask again. One line per decision, from decisions/DR-n.md.
+ */
+export function decidedText(root: string, vs: readonly Violation[]): string {
+  const records = new Map(listDecisions(root).map((d) => [d.id, d]));
+  return [...new Set(vs.flatMap((v) => (v.decision ? [v.decision] : [])))].map((id) => {
+    const d = records.get(id);
+    const outcome = d?.outcome ?? vs.find((v) => v.decision === id)!.options[0];
+    return `Already decided in ${id}${d ? ` (${d.title})` : ''}: ${outcome}. Plan it the decided way and resubmit; do not ask the user.`;
+  }).join('\n');
+}
+
+/** Undecided violations are forks (ask A or B); decided ones are replanned without asking. */
+export const splitDecided = (vs: readonly Violation[]) => ({ open: vs.filter((v) => !v.decision), decided: vs.filter((v) => !!v.decision) });
+
 export const ASK_RULE =
   'Stop and ask the user to choose A or B, in one short message that names both options, then wait for the answer. ' +
   'Never work around a violation or try another route.';
@@ -23,6 +39,59 @@ export type PlanHooks = {
   /** Instructions queued for the next tool result (e.g. recording a decision in Alike). */
   takeNotes(): string[];
 };
+
+export type PlanInput = {
+  steps: { n: number; text: string; files: string[]; imports: { from: string; to: string }[] }[];
+  avoided?: { from: string; to: string; decision: string; reason: string }[];
+};
+
+/** `submit_plan`: footprint, plan check (the one checker), `planned` + `plan_violation` events, and the tool's reply. */
+export function submitPlan(repo: Repo, bus: Bus, hooks: PlanHooks, { steps, avoided: avoidedIn }: PlanInput): string {
+  const cellName = (domain: string, layer: string) =>
+    `${repo.map.domains.find((d) => d.id === domain)?.name ?? domain} · ${repo.map.layers.find((l) => l.id === layer)?.name ?? layer}`;
+  const norm = (p: string) => repo.rel(p) ?? p.replace(/^\.\//, '');
+  const clean: PlanStep[] = steps.map((s) => ({
+    n: s.n, text: s.text, files: s.files.map(norm),
+    imports: s.imports.map((i) => ({ from: norm(i.from), to: i.to.startsWith('.') ? i.to : norm(i.to) })),
+  }));
+  const exists = withExtra(repo.exists, clean.flatMap((s) => s.files));
+  const fp = planFootprint(repo.map, clean, exists, repo.mapper);
+  // Avoided approaches must cite a decision that exists in decisions/; unknown ids are dropped (and said so).
+  const known = new Set(listDecisions(repo.root).map((d) => d.id));
+  const end = (x: string) => (x.startsWith('domain:') ? x : norm(x));
+  const avoided = (avoidedIn ?? []).filter((a) => known.has(a.decision.trim())).map((a) => ({ from: end(a.from), to: end(a.to), decision: a.decision.trim(), reason: a.reason }));
+  const dropped = (avoidedIn ?? []).filter((a) => !known.has(a.decision.trim()));
+  bus.emit('planned', {
+    steps: clean,
+    cells: fp.cells.map((c) => ({ domain: c.domain, layer: c.layer, steps: c.steps, files: c.files })),
+    edges: fp.edges.map((e) => ({ from: e.from, to: e.to, steps: e.steps, imports: e.imports })),
+    unassigned: fp.unassigned,
+    ...(avoided.length ? { avoided } : {}),
+  });
+  for (const v of fp.violations) bus.emit('plan_violation', { violation: v }, { path: v.file, cell: repo.cellOf(v.file) });
+  hooks.onPlan(clean, fp.violations);
+
+  const lines = [
+    `Plan recorded: ${clean.length} step(s).`,
+    `Cells: ${fp.cells.map((c) => `${cellName(c.domain, c.layer)} (steps ${c.steps.join(', ')})`).join('; ') || 'none'}.`,
+    `New cross-domain dependencies: ${fp.edges.map((e) => `${e.from} → ${e.to}`).join('; ') || 'none'}.`,
+  ];
+  if (fp.unassigned.length) lines.push(`Files outside every domain: ${fp.unassigned.join(', ')}.`);
+  if (avoided.length) lines.push(`Avoided (per standing decisions): ${avoided.map((a) => `${a.from} → ${a.to} (${a.decision})`).join('; ')}.`);
+  if (dropped.length) lines.push(`Not recorded as avoided (no such decision in decisions/): ${dropped.map((a) => `${a.from} → ${a.to} (${a.decision})`).join('; ')}.`);
+  const { open, decided } = splitDecided(fp.violations);
+  if (open.length) {
+    lines.push('', `VIOLATIONS (${open.length}):`, violationText(open), '', ASK_RULE + ' Do not exit plan mode until the user has answered and you have resubmitted the plan.');
+  }
+  if (decided.length) {
+    lines.push('', `ALREADY DECIDED (${decided.length}):`, ...decided.map((v) => v.reason), decidedText(repo.root, decided),
+      'Do not exit plan mode until a resubmitted plan no longer crosses it.');
+  }
+  if (!fp.violations.length) lines.push('No violations. Exit plan mode when ready.');
+  const notes = hooks.takeNotes();
+  if (notes.length) lines.push('', ...notes);
+  return lines.join('\n');
+}
 
 export function harnessTools(repo: Repo, bus: Bus, hooks: PlanHooks) {
   const store = semanticStore(repo, bus);
@@ -36,7 +105,7 @@ export function harnessTools(repo: Repo, bus: Bus, hooks: PlanHooks) {
     tools: [
       tool(
         'submit_plan',
-        'Submit your implementation plan before editing anything. Numbered steps; each lists the exact repo-relative file paths it will create or modify, and every new import it adds as { from: path, to: path }. Returns the architecture footprint and any rule violations.',
+        'Submit your implementation plan before editing anything. Numbered steps; each lists the exact repo-relative file paths it will create or modify, and every new import it adds as { from: path, to: path }. If a standing decision rules out the obvious approach, list that approach in `avoided` ({ from, to: repo paths or domain:<id>, decision: "DR-n", reason }). Returns the architecture footprint and any rule violations.',
         {
           steps: z.array(z.object({
             n: z.number().int(),
@@ -44,39 +113,9 @@ export function harnessTools(repo: Repo, bus: Bus, hooks: PlanHooks) {
             files: z.array(z.string()),
             imports: z.array(z.object({ from: z.string(), to: z.string() })).default([]),
           })),
+          avoided: z.array(z.object({ from: z.string(), to: z.string(), decision: z.string(), reason: z.string() })).optional(),
         },
-        async ({ steps }) => {
-          const norm = (p: string) => repo.rel(p) ?? p.replace(/^\.\//, '');
-          const clean: PlanStep[] = steps.map((s) => ({
-            n: s.n, text: s.text, files: s.files.map(norm),
-            imports: s.imports.map((i) => ({ from: norm(i.from), to: i.to.startsWith('.') ? i.to : norm(i.to) })),
-          }));
-          const exists = withExtra(repo.exists, clean.flatMap((s) => s.files));
-          const fp = planFootprint(repo.map, clean, exists, repo.mapper);
-          bus.emit('planned', {
-            steps: clean,
-            cells: fp.cells.map((c) => ({ domain: c.domain, layer: c.layer, steps: c.steps, files: c.files })),
-            edges: fp.edges.map((e) => ({ from: e.from, to: e.to, steps: e.steps, imports: e.imports })),
-            unassigned: fp.unassigned,
-          });
-          for (const v of fp.violations) bus.emit('plan_violation', { violation: v }, { path: v.file, cell: repo.cellOf(v.file) });
-          hooks.onPlan(clean, fp.violations);
-
-          const lines = [
-            `Plan recorded: ${clean.length} step(s).`,
-            `Cells: ${fp.cells.map((c) => `${cellName(c.domain, c.layer)} (steps ${c.steps.join(', ')})`).join('; ') || 'none'}.`,
-            `New cross-domain dependencies: ${fp.edges.map((e) => `${e.from} → ${e.to}`).join('; ') || 'none'}.`,
-          ];
-          if (fp.unassigned.length) lines.push(`Files outside every domain: ${fp.unassigned.join(', ')}.`);
-          if (fp.violations.length) {
-            lines.push('', `VIOLATIONS (${fp.violations.length}):`, violationText(fp.violations), '', ASK_RULE + ' Do not exit plan mode until the user has answered and you have resubmitted the plan.');
-          } else {
-            lines.push('No violations. Exit plan mode when ready.');
-          }
-          const notes = hooks.takeNotes();
-          if (notes.length) lines.push('', ...notes);
-          return text(lines.join('\n'));
-        },
+        async (input) => text(submitPlan(repo, bus, hooks, input)),
         { alwaysLoad: true },
       ),
       tool('cell_for', 'Which domain × layer cell a repo path belongs to.', { path: z.string() }, async ({ path }) => {

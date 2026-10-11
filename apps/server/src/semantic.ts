@@ -69,11 +69,16 @@ export class SemanticStore {
     return graph;
   }
 
-  /** Files with current Tier 2 facts, of all files with Tier 1 facts. */
+  /** Code files with current Tier 2 facts, of all code files with Tier 1 facts (schema files have no calls). */
   coverage() {
     let typed = 0;
-    for (const [path, f] of this.repo.fileFacts) if (this.facts[path]?.hash === f.hash) typed++;
-    return { typed, files: this.repo.fileFacts.size };
+    let files = 0;
+    for (const [path, f] of this.repo.fileFacts) {
+      if (path.endsWith('.sql')) continue;
+      files++;
+      if (this.facts[path]?.hash === f.hash) typed++;
+    }
+    return { typed, files };
   }
 }
 
