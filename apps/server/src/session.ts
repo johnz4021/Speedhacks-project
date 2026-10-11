@@ -14,7 +14,7 @@ import type { Bus } from './bus';
 
 /** Beat 1: questions about the system are answered from the graph the user sees, not by reading file after file. */
 export const GRAPH_FIRST =
-  'For questions about the system (architecture, who calls what, where data goes), answer from the mcp__interpretability__ graph tools first — overview, trace, graph_neighbors, symbols_in, domain, who_writes — and cite repo paths so the user can click them; read files only to confirm details. Keep the answer short: the user sees it drawn on the map.';
+  'For questions about the system (architecture, who calls what, where data goes), answer from the mcp__interpretability__ graph tools first — overview, trace, graph_neighbors, symbols_in, domain, who_writes — and cite repo paths so the user can click them; read files only to confirm details. Keep the answer short (about ten lines, paths over prose): the user sees it drawn on the map.';
 
 const PLAN_RULES = [
   'If the user only asks a question, answer it (see below); a question needs no plan and no ExitPlanMode.',
