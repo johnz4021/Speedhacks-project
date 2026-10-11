@@ -1,0 +1,31 @@
+{
+  "name": "@harness/core",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./view": "./src/view.ts"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@vscode/tree-sitter-wasm": "0.3.1",
+    "es-module-lexer": "1.7.0",
+    "get-tsconfig": "4.14.3",
+    "oxc-parser": "0.153.0",
+    "oxc-resolver": "11.24.2",
+    "picomatch": "^4.0.2",
+    "ts-morph": "28.0.0",
+    "typescript-7": "npm:typescript@7.0.2",
+    "yaml": "^2.6.1",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/picomatch": "^3.0.1",
+    "vitest": "^2.1.8"
+  }
+}

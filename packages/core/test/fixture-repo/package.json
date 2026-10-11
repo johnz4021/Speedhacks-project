@@ -1,0 +1,1 @@
+{ "name": "scout-agent-fixture", "private": true, "type": "module", "scripts": { "scout": "tsx src/channels/cli.ts" } }

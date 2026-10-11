@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.harness/
+.env
+.DS_Store
+.gstack/
+.claude/worktrees/
