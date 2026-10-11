@@ -14,6 +14,7 @@ import { attachSemantic } from './semantic'; // Tier 2 semantic facts (NAVIGATIO
 import { attachAuditor, auditorRoutes } from './auditor'; // auditor (N9)
 import { attachJourneys, journeyRoutes } from './journeys'; // journeys (N10)
 import { attachSnapshots, snapshotRoutes } from './snapshots'; // event-log snapshots (N11)
+import { initTreeSitter } from '@harness/core'; // Python and Go Tier 1 facts (N11)
 
 const here = dirname(fileURLToPath(import.meta.url));
 const REPO = process.env.HARNESS_REPO ? resolve(process.env.INIT_CWD ?? process.cwd(), process.env.HARNESS_REPO) : '';
@@ -56,6 +57,8 @@ function startSession() {
  * candidates (HARNESS_CARTOGRAPHER=0, or a failed/empty run: the reference map), and wait for Confirm.
  */
 async function load() {
+  // Python and Go facts need the tree-sitter wasm loaded once, before the first scan (N11). Without it they have none.
+  await initTreeSitter().catch((e) => console.log(`Tree-sitter unavailable; Python and Go files get no facts: ${(e as Error).message}`));
   if (repo.hasMap()) {
     repo.loadMapFile();
     bus.emit('map_confirmed', { map: repo.map, source: 'file' }, { turn: null });

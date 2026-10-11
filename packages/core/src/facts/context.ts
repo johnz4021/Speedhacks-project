@@ -28,8 +28,21 @@ export function attachResolver<T extends object>(fn: T, get: () => RepoResolverL
   return fn;
 }
 
-/** Give `fn` the resolver `from` carries, if any. Returns `fn`. */
+/** Give `fn` the resolver (and repo root) `from` carries, if any. Returns `fn`. */
 export function carryResolver<T extends object>(fn: T, from: object): T {
   const get = (from as Carrier)[KEY];
+  const root = rootOf(from);
+  if (root !== null) attachRoot(fn, root);
   return get ? attachResolver(fn, get) : fn;
 }
+
+const ROOT = Symbol.for('harness.repoRoot');
+
+/** Attach the repo root an `Exists` checks against (Python and Go extraction list and read package files). */
+export function attachRoot<T extends object>(fn: T, root: string): T {
+  Object.defineProperty(fn, ROOT, { value: root, enumerable: false, configurable: true });
+  return fn;
+}
+
+/** The repo root `fn` carries, or null. */
+export const rootOf = (fn: object): string | null => (fn as { [ROOT]?: string })[ROOT] ?? null;

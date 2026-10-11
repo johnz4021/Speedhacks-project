@@ -8,6 +8,7 @@ import { BULK_MIN, isMinified, parseModule, parseName, remember, type ModuleReco
 import { packageName } from './resolver';
 import { nextRoutes, routeFact } from './routes';
 import { findReads, sqlFacts } from './tables';
+import { extractTreeSitter, treeSitterLang, type LangContext } from './treesitter';
 
 /** `(from, spec)` → repo path, `vendor:<pkg>`, or null (unresolved). */
 export type Resolve = (from: string, spec: string) => string | null;
@@ -25,6 +26,8 @@ export type ExtractContext = {
    * against that file's text (comments masked), with named groups `method` and `path` (or groups 1 and 2).
    */
   routes?: readonly { file: string; pattern: string }[];
+  /** Python and Go: how to find and read other repo files (see treesitter.ts). */
+  lang?: LangContext;
 };
 
 /** Reads CLI arguments (`process.argv.slice(2)`, `argv[2]`, `parseArgs(…)`), not just the `argv[1]` is-main check. */
@@ -41,6 +44,7 @@ export function extractFacts(path: string, source: string, resolve: Resolve, ctx
 /** `extractFacts`, plus whether the source parsed (when it didn't, symbols and calls are empty, not "all removed"). */
 export function extract(path: string, source: string, resolve: Resolve, ctx: ExtractContext = {}): { facts: FileFacts; parsed: boolean } {
   if (path.endsWith('.sql')) return { facts: sqlFacts(path, source), parsed: true };
+  if (treeSitterLang(path)) return extractTreeSitter(path, source, ctx.lang);
   const { record, parsed } = parseModule(path, source);
   remember(path, source, record);
   const facts: FileFacts = { path, hash: hashText(source), imports: [], writes: [], symbols: [], calls: [], routes: [], entries: [] };

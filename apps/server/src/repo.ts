@@ -4,14 +4,14 @@ import { watch, type FSWatcher } from 'chokidar';
 import { diffLines } from 'diff';
 import {
   parseDomainMap, createMapper, listRepoFiles, scanRepoFacts, factsForSource, domainEdges, check, fileExistsIn, createFactsIndex,
-  settleCalls, diffSymbols, moduleRecord,
+  settleCalls, diffSymbols, moduleRecord, treeSitterLang,
   type CallFact, type DomainMap, type Facts, type FileFacts, type ImportEdge, type Violation, type Placement, type SymbolDiff, type SymbolFact,
 } from '@harness/core';
 import type { Bus } from './bus';
 
-const CODE = /\.(ts|tsx|js|jsx|mjs|cjs|mts)$/;
+const CODE = /\.(ts|tsx|js|jsx|mjs|cjs|mts|py|go)$/; // .py/.go: Tier 1 via tree-sitter (N11)
 /** Files that change how imports resolve or what the entries are: a change rescans facts (domains.yaml reloads the map). */
-const CONFIG = /(^|\/)(package\.json|tsconfig[^/]*\.json|jsconfig\.json|pnpm-workspace\.yaml)$/;
+const CONFIG = /(^|\/)(package\.json|tsconfig[^/]*\.json|jsconfig\.json|pnpm-workspace\.yaml|go\.mod)$/;
 export const isConfigFile = (rel: string) => rel === 'domains.yaml' || CONFIG.test(rel);
 /** Importers re-linked after one file's exports or symbols change (re-exports are followed up to 4 barrels deep). */
 export const MAX_RELINK = 200;
@@ -19,12 +19,12 @@ export const MAX_RELINK = 200;
 const callKey = (c: { from: string; to: string }) => `${c.from}\u0000${c.to}`;
 /** Export names, re-export targets and `export *` of a module record: what importers link through. */
 const exportShape = (path: string, text: string | null | undefined) => {
-  if (text == null) return '';
+  if (text == null || treeSitterLang(path)) return ''; // Python/Go: symbol names alone drive relinking
   const r = moduleRecord(path, text);
   return JSON.stringify([[...r.exports].sort(([a], [b]) => (a < b ? -1 : 1)), r.stars]);
 };
 const isBarrel = (path: string, text: string | null) => {
-  if (text === null) return false;
+  if (text === null || treeSitterLang(path)) return false;
   const r = moduleRecord(path, text);
   return r.stars.length > 0 || [...r.exports.values()].some((t) => 'spec' in t);
 };

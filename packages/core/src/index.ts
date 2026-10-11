@@ -38,3 +38,5 @@ export * from './journeys';
 export * from './protects';
 // Event-log snapshots (N11): reduceFrom(snapshot, events) equals reduce(events) (pure).
 export * from './snapshots';
+// Tier 1 for Python and Go (N11): web-tree-sitter, loaded once with initTreeSitter (node-only).
+export { initTreeSitter, treeSitterReady, treeSitterLang, extractTreeSitter, diskLangContext, type LangContext, type TreeSitterLang } from './facts/treesitter';
