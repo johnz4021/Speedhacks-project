@@ -55,7 +55,8 @@ type Turn = {
 export function bashWriteTarget(cmd: string, rel: (p: string) => string | null): string | null {
   const inRepo = (p: string) => !!p && !p.startsWith('/dev/') && rel(p.replace(/^['"]|['"]$/g, '')) !== null;
   // Redirects to a file: `> f`, `>> f`, `cat <<EOF > f` (not 2>&1, >&2, >/dev/null).
-  for (const m of cmd.matchAll(/(?:^|[^0-9&>])>>?\s*([^\s;&|<>()]+)/g)) if (!m[1]!.startsWith('&') && inRepo(m[1]!)) return `redirect to ${m[1]}`;
+  // `=>` and `->` (arrow functions, prose) are not redirects.
+  for (const m of cmd.matchAll(/(?:^|[^0-9&>=-])>>?\s*([^\s;&|<>()]+)/g)) if (!m[1]!.startsWith('&') && inRepo(m[1]!)) return `redirect to ${m[1]}`;
   for (const m of cmd.matchAll(/\btee\s+(?:-a\s+)?([^\s;&|<>()]+)/g)) if (inRepo(m[1]!)) return `tee ${m[1]}`;
   if (/\b(sed|perl)\s+(-[a-zA-Z]*\s+)*-[a-zA-Z]*i/.test(cmd)) return 'in-place edit';
   if (/\b(python3?|node|ruby|perl|deno|bun)\b[\s\S]*(open\([^)]*['"][wa]\+?['"]|write_text|writeFileSync|appendFileSync|\.write\(|fs\.write)/.test(cmd)) return 'script that writes files';
