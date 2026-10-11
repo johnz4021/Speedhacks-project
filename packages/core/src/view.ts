@@ -13,3 +13,5 @@ export * from './contracts/cartography';
 export type * from './contracts/api';
 // Living map engine (Cartography lane; pure, browser-safe).
 export * from './cartography';
+// Graph lane: ContextGraph, activity, projection, autoExpand, trace (browser-safe).
+export * from './graph';

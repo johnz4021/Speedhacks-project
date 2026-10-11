@@ -13,3 +13,4 @@ export * from './contracts/graph';
 export * from './contracts/cartography';
 export type * from './contracts/api';
 export * from './cartography';
+export * from './graph';

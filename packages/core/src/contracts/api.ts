@@ -13,6 +13,8 @@ export type TurnActivity = {
   plannedEdges: { from: string; to: string; steps: number[]; violation: ViolationState }[]; // file → file
   addedEdges: string[]; // GraphEdge ids added this turn
   cursor: string | null; // leaf id the agent is on
+  /** Current (map-level) violations: files that have one, and the `imports` GraphEdge ids they target. */
+  violations: { files: string[]; edges: string[] };
 };
 
 // ---- Graph lane (src/graph/, browser-safe) ----
