@@ -36,3 +36,5 @@ export * from './audit';
 export * from './journeys';
 // Beat 4: decisions protect the code that implements them (pure).
 export * from './protects';
+// Event-log snapshots (N11): reduceFrom(snapshot, events) equals reduce(events) (pure).
+export * from './snapshots';

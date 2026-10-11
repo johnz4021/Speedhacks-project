@@ -23,3 +23,5 @@ export * from './journeys';
 export { findingSignature, normalizeFindingText, isDismissed, textSimilarity, type RawFinding, type DismissedFinding } from './audit/findings';
 // Beat 4: what a decision protects, and whether a step or edit touches it.
 export * from './protects';
+// Event-log snapshots (N11): replay from the nearest snapshot.
+export * from './snapshots';
