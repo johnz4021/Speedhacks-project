@@ -12,7 +12,7 @@ const params = new URLSearchParams(location.search);
 export const fakeMode = params.get('fake');
 
 export function connect() {
-  if (fakeMode) return loadFake(fakeMode === 'play');
+  if (fakeMode) return loadFake(fakeMode === 'play', fakeMode);
   void fetch('/api/info')
     .then((r) => r.json() as Promise<{ repo: string }>)
     .then((i) => useStore.getState().setRepo(i.repo))
@@ -42,11 +42,12 @@ function openSocket(delay: number) {
   };
 }
 
-async function loadFake(play: boolean) {
+async function loadFake(play: boolean, fakeMode: string) {
   const st = useStore.getState();
   st.setConn('fake');
   st.setRepo('scout-agent (fake turn)');
-  const events = (await (await fetch('/fake-events.json')).json()) as HarnessEvent[];
+  const file = fakeMode === '1' || fakeMode === 'play' ? 'fake' : fakeMode; // `?fake=comp` → /comp-events.json
+  const events = (await (await fetch(`/${file}-events.json`)).json()) as HarnessEvent[];
   const at = params.get('at');
   if (!play) {
     st.hello(events, false);
