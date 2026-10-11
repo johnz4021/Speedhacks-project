@@ -13,12 +13,15 @@ Scout is a B2B sales research agent. Given a prospect company, a contact and a g
 3. writes a short research brief with a language model,
 4. syncs the contact to the CRM and drafts an outreach email (optionally sends it).
 
+It ships with a web app that looks and behaves like a production product: start research, read the brief and the trail of tools behind it, review and send the email, browse account notes, see model usage and the tool list.
+
 ## Tech constraints
 
 - TypeScript, Node 22, ESM. Run with `tsx`. Test with `vitest`. `tsconfig.json` uses `"module": "esnext"` and `"moduleResolution": "bundler"`.
 - **No network, no API keys, no native modules, no database server.** Everything runs offline and deterministically.
 - **Relative imports only, written without a file extension** (`import { complete } from "../gateway/complete"`). No `.js` or `.ts` specifiers, no path aliases, no barrel files that re-export `vendor/` modules. Each file imports a vendor module by its direct path, including `index` (`../../vendor/llm-openai/index`).
-- Target size: **2,500–3,500 lines** across `src/`, `vendor/` and `scripts/`, excluding fixtures and the lockfile.
+- Target size: **2,500–3,500 lines** across `src/`, `vendor/` and `scripts/`, excluding fixtures and the lockfile. The web app (`web/`) is extra, about 2,500 lines.
+- Web app: React + Vite + TypeScript in `web/`, no router or UI library. Fonts are bundled from `@fontsource-variable` packages, so nothing loads from the network. The web app talks to the server only over HTTP, so it adds no import edges into `src/`; its one import is `import type` from `src/shared/types`.
 - Storage is a tiny in-memory store with JSON snapshot, in `src/shared/db.ts`. **Every write goes through `db.insert("<table>", row)` or `db.update("<table>", id, patch)` with the table name as a double-quoted string literal**, so writes are greppable. Reads go through `db.get`, `db.all` and `db.find`, which any domain may call.
 
 ## Directory layout (follow exactly)
@@ -46,9 +49,20 @@ scout-agent/
     gateway/     complete.ts  embed.ts  redact.ts  cost-ledger.ts  providers.ts
     memory/      notes-store.ts  vector-index.ts  retrieve.ts
     outreach/    draft-email.ts  crm-sync.ts  send.ts  outreach-log.ts
-  scripts/       proof.ts  seed.ts
+  scripts/       dev.ts (runs API + web dev server)  proof.ts  seed.ts
   test/          channels/  orchestrator/  tools/  gateway/  memory/  outreach/
+  web/           index.html  vite.config.ts  tsconfig.json
+    src/main.tsx
+    src/app/                 shell: App, Sidebar, router
+    src/features/runs/       research form, run page, trail      (Agent loop)
+    src/features/tools/      tool list                            (Research tools)
+    src/features/usage/      model usage and cost                 (Model gateway)
+    src/features/notes/      accounts and notes                   (Memory)
+    src/features/outreach/   drafted and sent emails              (Outreach)
+    src/shared/              API client, format, ui, icons, styles (neutral)
 ```
+
+Feature folders never import each other; anything two features need lives in `web/src/shared/`.
 
 ## Tables and their owners
 
@@ -63,12 +77,12 @@ scout-agent/
 
 - **Gateway** (`src/gateway/`): the only intended path to models. `complete({ purpose, messages })`, where `purpose` is one of `"plan" | "profile" | "summary" | "brief" | "email"`, redacts emails, phone numbers and known contact names into tokens like `[EMAIL_1]`, sends to the provider chosen in `providers.ts` (`vendor/llm-openai` by default, `vendor/llm-anthropic` when `SCOUT_MODEL_PROVIDER=anthropic`), and appends a row to `cost_log` (tokens = characters / 4, fixed price table). Contact names come from `db.all("contacts")`; the gateway imports no other domain. `embed(text)` wraps `vendor/embeddings` the same way. No retries and no fallback between providers.
 - **Redaction** (`src/gateway/redact.ts`): the phone pattern treats any run of seven or more digits separated by spaces, dots, dashes, commas or parentheses as a phone number. It catches every phone format in the fixtures, and it also turns full-precision figures such as `$4,512,300` into `$[PHONE_3]`. Every redaction applies to every purpose; there is no option to skip one. Nothing in the existing product checks figures: enrichment fixtures write money as `$4.5B`, and the gateway tests cover phone numbers, emails and names only.
-- **Fake models** (`vendor/llm-*`): canned answers from fixtures, keyed by a hash of the prompt, for the prompts the product relies on (the planner's tool choice, email drafts). Any other prompt gets a deterministic extractive answer: the first three sentences of the last user message. Whatever the gateway sends is what comes back, tokens included.
+- **Fake models** (`vendor/llm-*`): canned answers from fixtures, keyed by a hash of the system prompt, for the prompts the product relies on (the planner's tool choice, email drafts). Any other prompt gets a deterministic extractive answer: the first three prose sentences of the last user message (lines of six or more words, with bullets and "Label:" prefixes stripped). Whatever the gateway sends is what comes back, tokens included, so the web app shows redaction tokens where a real model would have seen them.
 - **Tools** (`src/tools/`): each tool is a `Tool` (`{ name, tags, description, run(input, ctx) }`, typed in `src/shared/types.ts`). `tools/index.ts` exports the list of all tools; tools never import the orchestrator. Tools only read. They use their vendors directly (search, news, sec-edgar, enrichment) and call models through the gateway. `news-digest` groups and formats headlines without a model call.
 - **Orchestrator** (`src/orchestrator/`): `tool-registry.ts` imports the list from `../tools/index` and indexes it by name and tag. The run loop takes at most 6 steps. The planner calls `gateway.complete` with purpose `"plan"` to pick tools (the fake model's canned answer is fine), and also selects every registered tool whose `tags` match keywords in the goal. Run state goes to `runs`.
 - **Memory** (`src/memory/`): stores notes per company, indexes them with `gateway.embed`, retrieves the top 3 for the brief.
 - **Outreach** (`src/outreach/`): drafts an email via the gateway, upserts the contact in the fake CRM, writes `contacts` and `outreach_log`, and sends via the fake email vendor only when `send: true`.
-- **Channels** (`src/channels/`): `POST /runs` on `node:http`, plus a CLI (`npm run scout -- --company Acme --contact jane@acme.com --goal "..."`). Validation lives in `validate.ts`.
+- **Channels** (`src/channels/`): a JSON API under `/api` on `node:http` (runs, accounts and notes, contacts, outreach and sending a draft, usage, tools), which also serves the built web app, plus a CLI (`npm run scout -- --company Acme --contact jane@acme.com --goal "..."`). Validation lives in `validate.ts`.
 
 Every fake vendor returns deterministic output from `fixtures/` (keyed by a hash of the input, with a generic default) and appends to `vendor/_calllog.ts`.
 
@@ -103,11 +117,11 @@ This matters for the demo. Later, an agent is asked to "add a tool that summariz
 
 ## Git history
 
-Initialize a repo and commit in about 12 steps that read like real feature work, using conventional commit messages, in this order: scaffold → shared → vendor fakes and fixtures → gateway → memory → tools (search, profile, news digest) → orchestrator → channels → outreach → tests → proof script → finally `feat(tools): summarize recent news for the brief` (the exception, with the one-line body above) as the last commit.
+Initialize a repo and commit in about 13 steps that read like real feature work, using conventional commit messages, in this order: scaffold → shared → vendor fakes and fixtures → gateway → memory → tools (search, profile, news digest) → orchestrator → channels → outreach → tests → proof script → web app → finally `feat(tools): summarize recent news for the brief` (the exception, with the one-line body above) as the last commit.
 
 ## README
 
-Product description, how to run (`npm i`, `npm run dev`, `npm test`, `npm run proof`, the CLI), a folder overview, and a short "Adding a tool" section that explains the tool list in `src/tools/index.ts` and tags and says "see `src/tools/` for examples." Do **not** describe the architecture rules.
+Product description, how to run (`npm i`, `npm run build` + `npm start`, `npm run dev`, `npm test`, `npm run proof`, the CLI), the API, a folder overview, and a short "Adding a tool" section that explains the tool list in `src/tools/index.ts` and tags and says "see `src/tools/` for examples." Do **not** describe the architecture rules.
 
 ## Acceptance checks
 
@@ -121,4 +135,32 @@ Product description, how to run (`npm i`, `npm run dev`, `npm test`, `npm run pr
 - [ ] `vendor/news` returns an earnings call transcript for each fixture company.
 - [ ] 2,500–3,500 lines in `src/`, `vendor/`, `scripts/`.
 - [ ] None of the forbidden words appear in code, comments, commits or the README.
-- [ ] `git log --oneline` shows about 12 feature commits, with the news summarizer last.
+- [ ] `npm run typecheck` and `npm run build` pass; `npm start` serves the app and API on :8787.
+- [ ] `web/src/features/*` folders don't import each other, and nothing in `web/` imports `src/` except `import type` from `src/shared/types`.
+- [ ] `git log --oneline` shows about 13 feature commits, with the news summarizer last.
+
+## Map changes for the harness
+
+The web app adds a `ui` layer above `entry`. Proposed `domains.yaml` changes (the fixture lives in the harness repo; its owner applies them):
+
+```yaml
+layers:
+  - { id: ui,       name: UI }
+  - { id: entry,    name: Entry }
+  - { id: logic,    name: Logic }
+  - { id: data,     name: Data }
+  - { id: external, name: External }
+
+neutral: ["src/shared/**", "vendor/_calllog.ts", "web/src/shared/**"]
+ignore: [..., "web/dist/**", "web/public/**", "web/vite.config.ts", "web/tsconfig.json"]
+
+# cells to add
+channels.ui:     { paths: ["web/index.html", "web/src/main.tsx", "web/src/app/**"] }
+orchestrator.ui: { paths: ["web/src/features/runs/**"] }
+tools.ui:        { paths: ["web/src/features/tools/**"] }
+gateway.ui:      { paths: ["web/src/features/usage/**"] }
+memory.ui:       { paths: ["web/src/features/notes/**"] }
+outreach.ui:     { paths: ["web/src/features/outreach/**"] }
+```
+
+Edges this adds: `web/src/app/App.tsx` imports every feature page, so Channels › UI points at each domain's UI cell (one per domain, all from the shell). Feature folders import only `web/src/shared/`, which is neutral. `src/channels/routes.ts` now reads from memory, outreach and the gateway as well as the orchestrator, so Channels › Entry has edges to those domains too.
