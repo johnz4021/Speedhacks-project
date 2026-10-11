@@ -306,7 +306,7 @@ Only a candidate that beats the current map by a margin is shown, and between si
 - **after every turn**, on the turn's symbol-level diff, plan, decisions and fact delta;
 - optionally **on each submitted plan**. Its note appears on the approval card while you read it; it never blocks Approve.
 
-**What it checks:** whether the work contradicts your standing decisions in ways the three rule kinds can't express. For example: "DR-4 says filings go through the gateway with `redaction: "filings"`; `src/tools/filing-summarize.ts:31` calls `complete()` without it."
+**What it checks:** whether the work contradicts your standing decisions in ways the three rule kinds can't express. For example (DEMO_PLAN beat 6): "DR-4 says outreach history reaches the brief through the run loop; `src/tools/…:NN` reads `outreach_log` directly." That read goes through the neutral `src/shared/db`, so no import edge is crossed and the gate stays quiet. The auditor sees it through Tier 1 `reads` facts.
 
 **Output:**
 - **Advisory findings**, each with a confidence, the lines it refers to, and the decision it cites.
@@ -340,6 +340,24 @@ The new events are all in the log, so the UI is still a reduction and replay cov
 - **Conflicts are proposals.** Two people's accepted proposals that conflict in `domains.yaml` are resolved like any merge conflict. The cartographer can propose the merged map.
 - **Multiplayer** (vision): one shared live map, with each teammate's agent as a separate cursor. The cartographer runs once per repo, not per person.
 
+## 4.10 Demo reconciliation (DEMO_PLAN.md, ALIKE_INTEGRATION.md)
+
+`DEMO_PLAN.md` fixes the storyline, and that pulls some phases forward:
+
+| Beat | Needs | Phase | Status |
+| --- | --- | --- | --- |
+| Load | Instant skeleton, then the cartographer's map (6 domains, 5 layers incl. UI) | N5 | Engine merged; onboarding with scored candidates in wave 2 |
+| 1 Ask | Journey overlay ("Start research"), trace to `contacts.phone` and to `@anthropic-ai/sdk` (two paths, one red), graph tools | N8, N10 | Journeys and trace computed (wave 2); overlay UI moves up into wave 3 |
+| 2 Fix a bug | Symbol ghosts (`redact.ts#PHONE_PATTERN`), Point by shift-click | N6, N7 | Wave 3; fallback is cell ghosts and typing the path |
+| 3 Feature | Fork on DR-3, the decision recorded in git **and Alike from the server** | SPEC v1 + Alike redesign | Gate and forks done; Alike redesign pending capability check |
+| 4 Remember | Decision-backed violations replan without asking; plans list `avoided` approaches; **struck-through "rejected in DR-4, session 1" edges**; ledger "rejected options blocked" | SPEC v1 + contracts | Contracts merged; server and renderer in wave 2 |
+| 5 Living map | Watchlists proposal as ghosts with scores | N5 | Engine merged; proposal UI in wave 3 |
+| 6 Audit | Advisory finding from an outreach *read* | N9 | Auditor merged soon; needs `reads` facts (wave 2) and findings UI (wave 3) |
+
+Map and facts changes the demo requires (done): the reference map has a `ui` top layer, `schema.sql` files in data cells, web cells per domain, neutral `web/src/shared/**`, and a `cartography.routes` pattern for Scout's route table. Real Scout maps 72 files, none unassigned, 12 domain pairs, 11 routes, and exactly one violation.
+
+Alike (`ALIKE_INTEGRATION.md`) moves recording off the model and onto the server, anchors decisions to the architecture rather than to the violating file, reads decisions back, and isolates demo takes. The design is settled after checking Alike's real capabilities. Harness runs only against disposable copies (`npm run demo` → `../scout-run`); `../scout-agent` stays untouched at `demo-start`.
+
 ## 5. Visual direction (decision D1)
 
 1. **Atlas (cartographic blueprint).** Calm and print-like.
@@ -371,8 +389,8 @@ The new events are all in the log, so the UI is still a reduction and replay cov
 | N5 | **Living map: drift signals + cartographer** | `scoreMap` and every drift metric in core, pure and tested, including replaying past turns and git history. On a Scout copy, adding `src/billing/` with three files gives an instant faint guess mid-turn, then at turn end a scored proposal ("new domain Billing") shown as ghosts. Accept commits `domains.yaml`. Reject records a decision and is never proposed again. Onboarding produces the instant skeleton, then K scored candidates. Inferred sub-group labels appear in Domain view. |
 | N6 | **Module level + Code pane** | Symbol rows and call edges (syntactic). Each symbol shows its own state (edited, ghost, violation). The CodeMirror pane shows the turn diff and step badges. A plan that names `path#symbol` shows symbol ghosts. |
 | N7 | **Agent-aware navigation** | Follow Claude with hysteresis. Wedge indicators. Point → chips in the composer. Path links in chat. Blocked and fork states are visible at every level. The demo turn can be watched hands-free in Follow mode. |
-| N8 | **Tier 2 semantic facts + Trace** | A tsgo child process sends typed calls and implements as events keyed by content hash. Edges are styled by confidence. Trace mode finds `routes.ts → … → vendor/llm-openai` through the tool registry. The agent's graph tools work. |
-| N9 | **Auditor** | After each turn, findings are checked against standing decisions. On Scout, a filings tool that calls `complete()` without `redaction: "filings"` produces an advisory finding that cites DR-4 and the line. Dismiss is recorded. Promote turns it into a rule proposal. The ledger counters don't change. Optional plan review shows a note on the approval card. |
+| N8 | **Tier 2 semantic facts + Trace** | A tsgo child process sends typed calls and implements as events keyed by content hash. Edges are styled by confidence. Trace mode finds `routes.ts → … → vendor/llm-anthropic` through the tool registry (Scout's leak and default provider), and beat 1's trace reaches `table:contacts` with its columns from `schema.sql`. The agent's graph tools work. |
+| N9 | **Auditor** | After each turn, findings are checked against standing decisions. On Scout, a tool that reads `outreach_log` through `src/shared/db` while DR-4 ("research tools never read outreach data; the run loop passes outreach context in") stands produces an advisory finding that cites DR-4 and the line. Dismiss is recorded. Promote turns it into a rule proposal. The ledger counters don't change. Optional plan review shows a note on the approval card. |
 | N10 | **Journeys** | Entries are discovered, fetches are matched to routes, and journeys are computed. The cartographer names them asynchronously and you confirm. Overlay with numbered steps and playback. "Start research" on Scout plays end to end. |
 | N11 | **Real-world scale and languages** | tree-sitter for Python and Go. A cartographer for large repos that works from sampled directory summaries. The Sigma overview above 3,000 nodes. Log snapshots. Performance budgets checked in CI. Tried on hono and excalidraw-sized repos. |
 

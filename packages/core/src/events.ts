@@ -50,6 +50,8 @@ export type EventData = {
     cells: { domain: string; layer: string; steps: number[]; files: string[] }[];
     edges: { from: string; to: string; steps: number[]; imports: ImportEdge[] }[];
     unassigned: string[];
+    /** Approaches the plan deliberately avoids because a standing decision rules them out (stated by the agent, checked by the server). */
+    avoided?: { from: string; to: string; decision: string; reason: string }[];
   };
   plan_violation: { violation: Violation };
   fork_asked: { violations: Violation[]; text: string };
@@ -108,6 +110,7 @@ export type TurnState = {
   approved: boolean;
   firstEditAt: number | null; // event index of first `edited`
   numstat: { added: number; removed: number } | null;
+  avoided: { from: string; to: string; decision: string; reason: string }[];
   /** Leaf-level activity (for the context graph): path → what happened to that file this turn. */
   paths: Record<string, PathActivity>;
   callsAdded: { from: string; to: string }[];
@@ -121,7 +124,7 @@ export type FindingState = AuditFinding & { status: 'open' | AuditOutcome; turn:
 
 export type DomainEdgeState = { from: string; to: string; files: ImportEdge[] };
 
-export type Decision = EventData['decision_recorded'] & { turn: string | null; at: number };
+export type Decision = EventData['decision_recorded'] & { turn: string | null; at: number; session: string };
 
 export type UIState = {
   map: DomainMap | null;
@@ -148,13 +151,15 @@ export type UIState = {
   findings: Record<string, FindingState>;
   maintenance: (EventData['maintenance_run'] & { t: number })[];
   journeys: Journey[];
+  /** Coding-session ids in order of first appearance ("session 1", "session 2", …). */
+  sessions: string[];
 };
 
 export function initialState(): UIState {
   return {
     map: null, files: {}, edges: {}, violations: [], turns: [], current: null, cursor: null, chat: [],
     awaitingApproval: null, pendingFork: null, decisions: [], errors: [], edgeOrigin: {}, cellOrigin: {},
-    facts: {}, semantic: {}, drift: [], proposals: {}, labels: {}, findings: {}, maintenance: [], journeys: [],
+    facts: {}, semantic: {}, drift: [], proposals: {}, labels: {}, findings: {}, maintenance: [], journeys: [], sessions: [],
   };
 }
 
@@ -162,7 +167,7 @@ function newTurn(id: string, prompt: string, t: number): TurnState {
   return {
     id, prompt, startedAt: t, endedAt: null, steps: [], planned: {}, plannedEdges: {}, planViolations: [], gateBlocks: [], violationsSeen: [],
     looked: {}, edited: {}, tests: {}, unassigned: [], edgesAdded: [], edgesRemoved: [], forks: [], decisions: [],
-    approved: false, firstEditAt: null, numstat: null, paths: {}, callsAdded: [], callsRemoved: [],
+    approved: false, firstEditAt: null, numstat: null, paths: {}, callsAdded: [], callsRemoved: [], avoided: [],
   };
 }
 
@@ -191,6 +196,7 @@ function factsFromScan(scan: EventData['repo_scanned']): Record<string, FileFact
 export function apply(s: UIState, e: HarnessEvent, index: number): UIState {
   const turn = e.turn ? s.turns.find((x) => x.id === e.turn) ?? null : null;
   const d = (e.data ?? {}) as never;
+  if (e.session && !s.sessions.includes(e.session)) s.sessions.push(e.session);
 
   switch (e.kind) {
     case 'map_confirmed': {
@@ -306,6 +312,7 @@ export function apply(s: UIState, e: HarnessEvent, index: number): UIState {
       turn.plannedEdges = {};
       for (const ed of p.edges) turn.plannedEdges[edgeKey(ed.from, ed.to)] = ed;
       turn.unassigned = p.unassigned;
+      turn.avoided = p.avoided ?? [];
       turn.planViolations = []; // a resubmitted plan replaces the previous one's violations
       break;
     }
@@ -391,7 +398,7 @@ export function apply(s: UIState, e: HarnessEvent, index: number): UIState {
       const dec = d as EventData['decision_recorded'];
       const existing = s.decisions.find((x) => x.id === dec.id);
       if (existing) Object.assign(existing, dec); // the Alike confirmation re-emits with alike: true
-      else s.decisions.push({ ...dec, turn: e.turn, at: index });
+      else s.decisions.push({ ...dec, turn: e.turn, at: index, session: e.session });
       if (turn && !turn.decisions.includes(dec.id)) turn.decisions.push(dec.id);
       break;
     }
@@ -412,6 +419,9 @@ export function apply(s: UIState, e: HarnessEvent, index: number): UIState {
   }
   return s;
 }
+
+/** 1-based session number for "decided in session N", or 0 if unknown. */
+export const sessionNumber = (s: UIState, session: string) => s.sessions.indexOf(session) + 1;
 
 /** UI state = reduce(events). Replay is `reduce(events, i)`: the state after the first `i` events. */
 export function reduce(events: readonly HarnessEvent[], upTo = events.length): UIState {
