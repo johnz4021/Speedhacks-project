@@ -11,3 +11,5 @@ export * from './contracts/facts';
 export * from './contracts/graph';
 export * from './contracts/cartography';
 export type * from './contracts/api';
+// Graph lane: ContextGraph, activity, projection, autoExpand, trace (browser-safe).
+export * from './graph';
