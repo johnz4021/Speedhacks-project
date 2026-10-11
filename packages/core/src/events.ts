@@ -4,7 +4,7 @@ import type { ImportEdge, WriteFact, DomainEdge } from './facts';
 import type { Violation } from './rules';
 import type { PlanStep } from './plan';
 import type { FileFacts, SemanticFacts, SymbolDiff, CallConfidence } from './contracts/facts';
-import type { AuditFinding, AuditOutcome, DriftSignal, Label, MapProposal, ProposalOutcome } from './contracts/cartography';
+import type { AuditFinding, AuditOutcome, DriftSignal, Journey, Label, MapProposal, ProposalOutcome } from './contracts/cartography';
 
 export type Cell = { domain: string; layer: string };
 
@@ -20,7 +20,7 @@ export type EventKind =
   // NAVIGATION_PLAN: per-file facts for the context graph, and the living map (§3.1, §4.7).
   | 'facts_changed' | 'facts_resolved' | 'call_added' | 'call_removed'
   | 'drift_detected' | 'map_proposal_resolved' | 'labels_updated'
-  | 'audit_finding' | 'audit_resolved' | 'maintenance_run';
+  | 'audit_finding' | 'audit_resolved' | 'maintenance_run' | 'journeys_updated';
 
 export type HarnessEvent = {
   id: string;
@@ -77,6 +77,7 @@ export type EventData = {
   audit_finding: { finding: AuditFinding };
   audit_resolved: { id: string; outcome: AuditOutcome };
   maintenance_run: { agent: 'cartographer' | 'auditor'; trigger: string; ms: number; cost: number | null; ok: boolean };
+  journeys_updated: { journeys: Journey[] }; // the full current set (replaces)
 };
 
 export const cellKey = (c: Cell) => `${c.domain}/${c.layer}`;
@@ -146,13 +147,14 @@ export type UIState = {
   labels: Record<string, Label>; // key: `${kind}:${target}`
   findings: Record<string, FindingState>;
   maintenance: (EventData['maintenance_run'] & { t: number })[];
+  journeys: Journey[];
 };
 
 export function initialState(): UIState {
   return {
     map: null, files: {}, edges: {}, violations: [], turns: [], current: null, cursor: null, chat: [],
     awaitingApproval: null, pendingFork: null, decisions: [], errors: [], edgeOrigin: {}, cellOrigin: {},
-    facts: {}, semantic: {}, drift: [], proposals: {}, labels: {}, findings: {}, maintenance: [],
+    facts: {}, semantic: {}, drift: [], proposals: {}, labels: {}, findings: {}, maintenance: [], journeys: [],
   };
 }
 
@@ -259,6 +261,9 @@ export function apply(s: UIState, e: HarnessEvent, index: number): UIState {
       if (f) f.status = r.outcome;
       break;
     }
+    case 'journeys_updated':
+      s.journeys = (d as EventData['journeys_updated']).journeys;
+      break;
     case 'maintenance_run':
       s.maintenance.push({ ...(d as EventData['maintenance_run']), t: e.t });
       break;

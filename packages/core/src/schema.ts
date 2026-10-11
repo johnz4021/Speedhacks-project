@@ -15,7 +15,11 @@ const CellSchema = z.object({
 /** Living-map settings (NAVIGATION_PLAN §4.4). Missing thresholds fall back to DEFAULT_THRESHOLDS. */
 const CartographySchema = z.object({
   thresholds: z.record(z.string(), z.number()).optional(),
-  routes: z.array(z.object({ file: z.string(), pattern: z.string() })).optional(), // custom router patterns
+  /**
+   * Custom router patterns: `pattern` is a JS regex source matched against `file`'s text, with named groups
+   * `method` and `path` (or groups 1 and 2); the handler is the first symbol defined after the match.
+   */
+  routes: z.array(z.object({ file: z.string(), pattern: z.string() })).optional(),
 });
 
 const DomainSchema = z.object({

@@ -12,7 +12,7 @@ export type SymbolFact = {
   kind: SymbolKind;
   exported: boolean;
   parent: string | null; // enclosing symbol id, or null at top level
-  span: { start: number; end: number }; // byte offsets in the current text; never part of the id
+  span: { start: number; end: number }; // JS string (UTF-16) offsets in the current text; never part of the id
   sigHash: string; // normalized params, types, modifiers, export flag
   bodyHash: string; // whitespace-normalized body text
 };

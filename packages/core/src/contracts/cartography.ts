@@ -110,3 +110,17 @@ export const DEFAULT_THRESHOLDS: DriftThresholds = {
   bloatedCellShare: 0.4,
   persist: 2,
 };
+
+// ---- Journeys (NAVIGATION_PLAN §2, phase N10) ----
+
+export type JourneyStepKind = 'entry' | 'page' | 'fetch' | 'route' | 'symbol' | 'vendor' | 'table';
+
+/** One user flow, from an entry through the wiring to its sinks. Names come from the cartographer (inferred). */
+export type Journey = {
+  id: string; // `journey:<slug>`
+  name: string;
+  inferred: boolean; // true until the user confirms the name
+  entry: string; // entry or route node id
+  steps: { node: string; kind: JourneyStepKind; confidence: 'syntactic' | 'typed' | 'dispatch' | 'inferred' }[];
+  branches: { from: number; steps: string[] }[]; // alternate paths that leave the main path at step `from`
+};
