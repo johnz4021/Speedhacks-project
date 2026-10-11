@@ -19,6 +19,8 @@ export type ProposeInput = {
   decisions: StandingDecision[];
   rejected: RejectedProposal[]; // never propose these again
   k: number;
+  /** `onboard`: no confirmed map yet; `yaml` is the instant skeleton and candidates are whole new maps. Default `drift`. */
+  mode?: 'drift' | 'onboard';
 };
 export type Candidate = { title: string; rationale: string; yaml: string };
 export type ProposerResult = { candidates: Candidate[]; cost: number | null };
@@ -71,26 +73,49 @@ export function buildPrompt(input: ProposeInput): string {
   const counts = new Map<string, number>();
   for (const p of Object.keys(input.facts)) counts.set(where(p), (counts.get(where(p)) ?? 0) + 1);
 
+  const onboard = input.mode === 'onboard';
+  const intro = onboard
+    ? [
+        'You are the cartographer for this repo\'s architecture map, `domains.yaml` (domains are columns, layers are rows; files are placed by path globs).',
+        `There is no confirmed map yet. The domains.yaml below is an instant skeleton (one domain per top-level folder). Propose up to ${input.k} DIFFERENT complete maps that a product person can read.`,
+        'Your candidates are scored by code, not by you: cells lit per past commit (fewer is better), import-graph modularity by domain, unassigned files and evenness of cell sizes.',
+        '',
+        '## Rules',
+        '- 5–9 domains named in product language (e.g. "Model gateway", not "src/gateway"), lowercase ids, a one-line purpose each. Every source file lands in exactly one cell or in `neutral`/`ignore`.',
+        '- Layers suited to this repo, top to bottom (for an agent system: entry, logic, data, external). Data cells list the tables that domain writes. External cells hold vendor/third-party client code.',
+        '- When a folder holds exactly one cell, use a folder glob (e.g. `src/tools/**`) so files added later land there. List explicit file paths only where one folder is split across cells. Map test folders with `tests` globs.',
+        '- Exactly 3 invariants, ids DR-1, DR-2, DR-3, the most load-bearing ones the facts suggest: DR-1 `only_via` for the vendor clients only one domain should import; DR-2 one `owns_writes` rule covering every table; DR-3 one `no_edge` between two domains that must stay independent. The code may already break one of them in a single place; still propose the rule.',
+        '- A table belongs to exactly one cell\'s `tables`. Every `owns_writes` owner, `only_via.allowed_from` and `no_edge` endpoint must name an existing domain id. Layers must exist in `layers`.',
+        '- Make the candidates genuinely different from each other (e.g. different domain boundaries or layer sets).',
+        '- You may Read/Grep/Glob files to understand purposes. Do not modify anything.',
+        '',
+      ]
+    : [
+        'You are the cartographer for this repo\'s architecture map, `domains.yaml` (domains are columns, layers are rows; files are placed by path globs).',
+        `Deterministic drift signals have fired. Propose up to ${input.k} DIFFERENT candidate maps that would fix them. Each candidate is the complete new domains.yaml.`,
+        'Your candidates are scored by code, not by you: cells lit per past turn/commit (fewer is better), import-graph modularity by domain, unassigned files, evenness of cell sizes, decisions broken, and churn (files moved, ids removed).',
+        '',
+        '## Rules',
+        '- Change as little as possible. Start from the current domains.yaml text and keep everything you do not need to change (comments, ids, order, invariants, exceptions, decisions, cartography settings).',
+        '- A rename keeps the `id`; change only `name`. Prefer placing or moving files over re-cutting domains. Never remove an invariant that lists `decisions` or exceptions with a `decision`.',
+        '- New domains: lowercase id, product-language name (1–3 words), a one-line purpose. When a folder sits in one cell, use a folder glob (e.g. `src/billing/**`) so later files land there.',
+        '- A table belongs to exactly one cell\'s `tables` (the domain that writes it). Every `owns_writes` owner, `only_via.allowed_from` and `no_edge` endpoint must name an existing domain id. Layers must exist in `layers`.',
+        '- Make the candidates genuinely different from each other (e.g. a new domain vs. placing the files in an existing domain vs. a different split).',
+        '- NEVER propose a change the user already rejected (listed below), nor one with the same effect.',
+        '- You may Read/Grep/Glob files to understand purposes. Do not modify anything.',
+        '',
+      ];
+
   return [
-    'You are the cartographer for this repo\'s architecture map, `domains.yaml` (domains are columns, layers are rows; files are placed by path globs).',
-    `Deterministic drift signals have fired. Propose up to ${input.k} DIFFERENT candidate maps that would fix them. Each candidate is the complete new domains.yaml.`,
-    'Your candidates are scored by code, not by you: cells lit per past turn/commit (fewer is better), import-graph modularity by domain, unassigned files, evenness of cell sizes, decisions broken, and churn (files moved, ids removed).',
-    '',
-    '## Rules',
-    '- Change as little as possible. Start from the current domains.yaml text and keep everything you do not need to change (comments, ids, order, invariants, exceptions, decisions, cartography settings).',
-    '- A rename keeps the `id`; change only `name`. Prefer placing or moving files over re-cutting domains. Never remove an invariant that lists `decisions` or exceptions with a `decision`.',
-    '- New domains: lowercase id, product-language name (1–3 words), a one-line purpose. When a folder sits in one cell, use a folder glob (e.g. `src/billing/**`) so later files land there.',
-    '- A table belongs to exactly one cell\'s `tables` (the domain that writes it). Every `owns_writes` owner, `only_via.allowed_from` and `no_edge` endpoint must name an existing domain id. Layers must exist in `layers`.',
-    '- Make the candidates genuinely different from each other (e.g. a new domain vs. placing the files in an existing domain vs. a different split).',
-    '- NEVER propose a change the user already rejected (listed below), nor one with the same effect.',
-    '- You may Read/Grep/Glob files to understand purposes. Do not modify anything.',
-    '',
-    '## Signals',
-    ...input.signals.map((s) => `- ${s.signal}: ${s.metric} = ${s.value} (threshold ${s.threshold}, held ${s.persisted} turns) · scope: ${s.scope.join(', ')}`),
-    '',
-    `## Scope (affected domains plus one hop): ${input.scope.join(', ')}`,
-    '',
-    '## Files in scope (placement · imports · table writes)',
+    ...intro,
+    ...(onboard ? [] : [
+      '## Signals',
+      ...input.signals.map((s) => `- ${s.signal}: ${s.metric} = ${s.value} (threshold ${s.threshold}, held ${s.persisted} turns) · scope: ${s.scope.join(', ')}`),
+      '',
+      `## Scope (affected domains plus one hop): ${input.scope.join(', ')}`,
+      '',
+    ]),
+    onboard ? '## Files (skeleton placement · imports · table writes)' : '## Files in scope (placement · imports · table writes)',
     ...files.map((f) => {
       const imports = f.imports.map((i) => i.to).filter((t) => !t.startsWith('vendor:'));
       return `- ${f.path} [${where(f.path)}]${imports.length ? ` → ${imports.join(', ')}` : ''}${f.writes.length ? ` · writes ${[...new Set(f.writes.map((w) => w.table))].join(', ')}` : ''}`;
@@ -111,7 +136,7 @@ export function buildPrompt(input: ProposeInput): string {
     '## Proposals the user REJECTED (never propose these again)',
     ...(input.rejected.length ? input.rejected.map((r) => `- ${r.proposal} (${r.decision}): ${r.summary}\n  changes: ${JSON.stringify(r.changes)}`) : ['(none)']),
     '',
-    '## Current domains.yaml',
+    onboard ? '## Instant skeleton (deterministic; replace it)' : '## Current domains.yaml',
     '```yaml',
     input.yaml.trimEnd(),
     '```',

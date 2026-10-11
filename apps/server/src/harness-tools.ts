@@ -2,6 +2,8 @@ import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { planFootprint, withExtra, type PlanStep, type Violation } from '@harness/core';
 import { listDecisions } from './decisions';
+import { findNode, neighborsText, sinksFor, symbolsText, traceText } from './graph-tools';
+import { semanticStore } from './semantic';
 import type { Repo } from './repo';
 import type { Bus } from './bus';
 
@@ -23,6 +25,8 @@ export type PlanHooks = {
 };
 
 export function harnessTools(repo: Repo, bus: Bus, hooks: PlanHooks) {
+  const store = semanticStore(repo, bus);
+  const rel = (p: string) => repo.rel(p);
   const cellName = (domain: string, layer: string) =>
     `${repo.map.domains.find((d) => d.id === domain)?.name ?? domain} · ${repo.map.layers.find((l) => l.id === layer)?.name ?? layer}`;
 
@@ -98,6 +102,40 @@ export function harnessTools(repo: Repo, bus: Bus, hooks: PlanHooks) {
         const hits = all.filter((d) => d.anchors.paths.some((a) => rel.some((p) => p === a || p.startsWith(a.replace(/\*\*?.*$/, '')))));
         return text(hits.length ? hits.map((d) => `${d.id}: ${d.title}\nOutcome: ${d.outcome}\nRejected: ${d.rejected}\n${d.rationale}`).join('\n\n') : 'No standing decisions for these paths.');
       }),
+      // ---- graph tools (NAVIGATION_PLAN §3.4): the graph the user sees, no model calls; not in the brief.
+      tool(
+        'graph_neighbors',
+        'Edges around a node of the live architecture graph (the one the user sees): imports, calls (syntactic | typed | dispatch), implements, handles, writes, uses. `id`: a repo path, path#symbol, a route like "POST /api/runs", vendor:<pkg>, domain:<id> or cell:<domain>/<layer>. Read-only.',
+        {
+          id: z.string(),
+          kinds: z.array(z.enum(['imports', 'calls', 'implements', 'handles', 'writes', 'reads', 'uses', 'fetches', 'starts'])).optional(),
+          hops: z.number().int().min(1).max(3).optional(),
+        },
+        async ({ id, kinds, hops }) => {
+          const g = store.graph();
+          const hit = findNode(g, id, rel);
+          return text('error' in hit ? hit.error : neighborsText(g, repo.map, hit.id, kinds, hops ?? 1));
+        },
+      ),
+      tool(
+        'trace',
+        'Shortest call chains from a symbol, route or file to where they end: vendors, tables and external cells, or `to` (a node, or a path prefix like vendor/llm-openai). Follows calls, route handlers and interface dispatch ("via registry"); hops inside one cell are collapsed. Read-only.',
+        { from: z.string(), to: z.string().optional() },
+        async ({ from, to }) => {
+          const g = store.graph();
+          const start = findNode(g, from, rel);
+          if ('error' in start) return text(start.error);
+          const sinks = to === undefined ? undefined : sinksFor(g, to, rel);
+          if (sinks && 'error' in sinks) return text(sinks.error);
+          return text(traceText(g, repo.map, start.id, sinks, store.coverage()));
+        },
+      ),
+      tool(
+        'symbols_in',
+        'Symbols of a file (functions, classes, methods, consts, types) with line numbers, outgoing call counts and the interfaces they implement, plus its routes and entries; or the files under a directory. Read-only.',
+        { path: z.string() },
+        async ({ path }) => text(symbolsText(store.graph(), repo.map, repo.fileFacts, repo.rel(path) ?? path, (p) => repo.current(p))),
+      ),
     ],
   });
 }
