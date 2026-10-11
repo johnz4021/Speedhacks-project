@@ -78,7 +78,8 @@ export class Session {
       const cells = Object.entries(d.cells).map(([layer, c]) => `    ${layer}: ${[...(c.paths ?? []), ...(c.tables ?? []).map((t) => `table ${t}`)].join(', ')}`);
       return `- ${d.name} (${d.id}): ${d.purpose}\n${cells.join('\n')}`;
     });
-    const decisions = listDecisions(this.repo.root).map((d) =>
+    // Rejected map proposals are cartographer memory, not standing decisions for the coding agent.
+    const decisions = listDecisions(this.repo.root).filter((d) => d.status !== 'rejected').map((d) =>
       `- ${d.id}: ${d.title}\n  Outcome: ${d.outcome}\n  Rejected: ${d.rejected}\n  ${d.rationale.replace(/\n+/g, '\n  ')}`);
     // Seeded invariants are deliberately not listed (SPEC §6): they are enforced at plan and edit time.
     return [
