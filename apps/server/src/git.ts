@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 
-/** Paths Harness itself writes; never counted as the coding session's work. */
+/** Paths Interpretability itself writes; never counted as the coding session's work. */
 const HARNESS_PATHS = [':(exclude)domains.yaml', ':(exclude)decisions', ':(exclude).harness'];
 
 export function git(repo: string, args: string[]): string {
@@ -49,7 +49,7 @@ export function numstat(repo: string, base: Baseline): { added: number; removed:
   return { added, removed, files };
 }
 
-/** Commit only Harness's own files, so the coding session's uncommitted edits stay out (SPEC §8). */
+/** Commit only Interpretability's own files, so the coding session's uncommitted edits stay out (SPEC §8). */
 export function commitPaths(repo: string, paths: string[], message: string) {
   git(repo, ['add', '--', ...paths]);
   git(repo, ['commit', '-q', '-m', message, '--', ...paths]);

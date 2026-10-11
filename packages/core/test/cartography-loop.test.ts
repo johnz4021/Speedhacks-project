@@ -228,7 +228,7 @@ describe('chooseCandidate', () => {
 });
 
 describe('living-map node helpers', () => {
-  it('gitHistory lists commits oldest first without Harness files', () => {
+  it('gitHistory lists commits oldest first without Interpretability files', () => {
     const root = sandbox();
     mkdirSync(join(root, 'decisions'));
     writeFileSync(join(root, 'decisions/DR-9.md'), 'x');

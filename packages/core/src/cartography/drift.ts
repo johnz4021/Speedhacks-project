@@ -86,7 +86,7 @@ export const detectDrift: DetectDrift = (map, facts, ui, history, t, previous = 
     if (e.all > 0 && e.unassigned.length === e.all) out.push({ signal: 'new_top_level', metric: `new top-level folder ${top}/ (no file on the map)`, value: e.all, threshold: 0, scope: e.unassigned });
   }
 
-  // Turns too wide: median cells lit over the last N Harness turns (needs min(3, N) turns).
+  // Turns too wide: median cells lit over the last N Interpretability turns (needs min(3, N) turns).
   const turns = history.filter((h) => h.source === 'turn').slice(-t.wideTurnsWindow);
   const lit = cellsLitPerUnit(mapper, facts, turns);
   if (lit.length >= Math.min(3, t.wideTurnsWindow) && median(lit) > t.wideTurnsMedian) {

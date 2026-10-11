@@ -100,7 +100,7 @@ export function harnessTools(repo: Repo, bus: Bus, hooks: PlanHooks) {
     `${repo.map.domains.find((d) => d.id === domain)?.name ?? domain} · ${repo.map.layers.find((l) => l.id === layer)?.name ?? layer}`;
 
   return createSdkMcpServer({
-    name: 'harness',
+    name: 'interpretability',
     version: '0.1.0',
     tools: [
       tool(

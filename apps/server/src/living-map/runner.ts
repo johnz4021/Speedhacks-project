@@ -15,7 +15,7 @@ export type ProposeInput = {
   signals: DriftSignal[]; // the persisted signals that triggered this run
   scope: string[]; // node ids: trigger scopes plus the affected domains and one hop
   history: readonly HistoryTurn[];
-  turns: { id: string; prompt: string; files: string[] }[]; // recent Harness turns
+  turns: { id: string; prompt: string; files: string[] }[]; // recent Interpretability turns
   decisions: StandingDecision[];
   rejected: RejectedProposal[]; // never propose these again
   k: number;

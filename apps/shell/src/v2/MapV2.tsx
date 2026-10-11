@@ -467,7 +467,7 @@ function Empty() {
   const conn = useStore((s) => s.conn);
   return (
     <div className="v2-empty">
-      <p className="v2-empty-title">{conn === 'down' ? 'Waiting for the Harness server' : 'Reading the repo'}</p>
+      <p className="v2-empty-title">{conn === 'down' ? 'Waiting for the Interpretability server' : 'Reading the repo'}</p>
       <p>{conn === 'down' ? 'Start it with HARNESS_REPO=<path> npm run dev. This page reconnects on its own.' : 'The map appears once domains.yaml is loaded or proposed.'}</p>
     </div>
   );

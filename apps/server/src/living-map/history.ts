@@ -4,7 +4,7 @@ import type { HistoryTurn } from '@harness/core';
 
 const HARNESS_OWN = (p: string) => p === 'domains.yaml' || p.startsWith('decisions/') || p.startsWith('.harness/');
 
-/** The last `limit` non-merge commits, oldest first, as history units (`git log --name-only`). Harness's own files are dropped. */
+/** The last `limit` non-merge commits, oldest first, as history units (`git log --name-only`). Interpretability's own files are dropped. */
 export function gitHistory(root: string, limit = 200): HistoryTurn[] {
   let out: string;
   try { out = git(root, ['log', `-n${limit}`, '--no-merges', '--name-only', '--format=%x00%H']); }

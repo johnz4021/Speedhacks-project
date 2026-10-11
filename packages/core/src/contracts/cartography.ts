@@ -22,7 +22,7 @@ export type DriftSignal = {
   persisted: number; // consecutive turn ends it has held for; triggers at >= 2
 };
 
-/** A unit of history to score maps against: a Harness turn or a git commit. */
+/** A unit of history to score maps against: a Interpretability turn or a git commit. */
 export type HistoryTurn = { id: string; source: 'turn' | 'commit'; files: string[] };
 
 export type MapScore = {

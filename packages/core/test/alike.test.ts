@@ -61,7 +61,7 @@ describe('anchors', () => {
     expect(d.title).toBe('DR-4: Research tools never read outreach data; the run loop passes outreach context in');
     expect(d.rationale).toContain('Refines DR-3 (Research tools never depend on outreach).');
     expect(d.rationale).toContain('Rejected: Add an exception for src/tools/outreach-history.ts');
-    expect(d.rationale).toContain('Decided in Harness session 1.');
+    expect(d.rationale).toContain('Decided in Interpretability session 1.');
     expect(d).toMatchObject({ decision_type: 'standing', status: 'made' });
   });
 });

@@ -19,7 +19,7 @@ export type TurnSurface = {
   /** `turn_started.baseline` (a `git stash create` snapshot, or HEAD); null for a plan review. */
   baseline: string | null;
   source: 'turn' | 'plan';
-  /** Files the turn changed (or the plan names), sorted. Harness's own files are never included. */
+  /** Files the turn changed (or the plan names), sorted. Interpretability's own files are never included. */
   files: string[];
   created: string[];
   /** Symbol ids the turn added or changed (renames count as their new id), sorted. */

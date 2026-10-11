@@ -21,7 +21,7 @@ export type AlikeDecision = {
   anchors: AlikeAnchor[];
 };
 
-/** What Harness knows about a decision when it records it. */
+/** What Interpretability knows about a decision when it records it. */
 export type DecisionInput = {
   id: string;
   title: string;
@@ -31,7 +31,7 @@ export type DecisionInput = {
   invariant: Invariant;
   files: string[]; // files the fork was about
   answer: string;
-  session: number; // 1-based Harness session number
+  session: number; // 1-based Interpretability session number
 };
 
 const MAX_PATH_ANCHORS = 20; // Alike: at most 20 path + machine_path anchors
@@ -126,7 +126,7 @@ export function alikeDecision(map: DomainMap, d: DecisionInput, repository: stri
       `Chosen: ${d.outcome}.`,
       `Rejected: ${d.rejected}.`,
       `In the user's words: "${d.answer.trim()}".`,
-      `Decided in Harness session ${d.session}.`,
+      `Decided in Interpretability session ${d.session}.`,
     ].join(' '),
     decision_type: 'standing',
     status: 'made',

@@ -1,6 +1,6 @@
-# Harness: build spec
+# Interpretability: build spec
 
-**Text in, architecture out.** Harness is a diagram-first shell around real Claude Code. You talk to the agent in a chat pane; a domain × layer map of the target repo shows, live, what each turn plans and does to the architecture; and the agent stops to ask you before it crosses a rule. Decisions you make become rules that later sessions are checked against.
+**Text in, architecture out.** Interpretability is a diagram-first shell around real Claude Code. You talk to the agent in a chat pane; a domain × layer map of the target repo shows, live, what each turn plans and does to the architecture; and the agent stops to ask you before it crosses a rule. Decisions you make become rules that later sessions are checked against.
 
 The theme is giving people time back. Agents made writing code nearly free, but understanding and checking it did not get cheaper. Every feature below exists to cut reading, rework or re-explaining, and the time ledger counts those savings.
 
@@ -49,7 +49,7 @@ Run: `HARNESS_REPO=../scout-agent npm run dev` (server on 4310, shell on 5173).
 
 1. **No model calls in the hot path.** Hooks, the mapper, the import parser and the rule checker are deterministic and fast. Model calls (the cartographer) never block the coding session.
 2. **Every piece of UI state is a pure reduction of the event log.** Footprint, ghosts, ledger, summary, provenance and replay are all `reduce(events)`. Replay is "reduce up to index i".
-3. **Harness writes to the target repo only in three places:** `domains.yaml`, `decisions/`, `.harness/` (gitignored). The coding session is the only thing that edits product code.
+3. **Interpretability writes to the target repo only in three places:** `domains.yaml`, `decisions/`, `.harness/` (gitignored). The coding session is the only thing that edits product code.
 4. **Facts win on structure, the user wins on meaning, the agent wins only on stated intent**, and intent is always checked against facts.
 
 ## 3. The map (`domains.yaml`)
@@ -119,7 +119,7 @@ query({
     permissionMode: 'plan',
     systemPrompt: { type: 'preset', preset: 'claude_code', append: brief() },
     mcpServers: { harness: harnessTools },    // createSdkMcpServer; user-scope MCP servers (Alike) still load
-    allowedTools: ['mcp__harness__*', 'mcp__alike__record_decision', 'mcp__alike__resolve_work_item', 'mcp__alike__describe_entity_kind'],
+    allowedTools: ['mcp__interpretability__*', 'mcp__alike__record_decision', 'mcp__alike__resolve_work_item', 'mcp__alike__describe_entity_kind'],
     hooks: { PreToolUse: [...], PostToolUse: [...] },
     canUseTool,                                // intercepts ExitPlanMode for approval
   },
@@ -128,7 +128,7 @@ query({
 
 **`brief()`** contains: the map (domains, purposes, cell paths), every standing decision from `decisions/` (with the invariant it qualifies and the option it rejected), and these rules:
 
-> Before editing anything, call `mcp__harness__submit_plan` with numbered steps. Each step lists the exact file paths it will create or modify and any new imports it adds (from path → to path). If the result contains violations, stop and ask the user to choose between the two options it gives, in one short message, then wait. Never work around a violation. After the user answers, resubmit the plan, then exit plan mode.
+> Before editing anything, call `mcp__interpretability__submit_plan` with numbered steps. Each step lists the exact file paths it will create or modify and any new imports it adds (from path → to path). If the result contains violations, stop and ask the user to choose between the two options it gives, in one short message, then wait. Never work around a violation. After the user answers, resubmit the plan, then exit plan mode.
 
 The brief does **not** list the seeded invariants (`source: cartographer`). They are enforced at plan and edit time instead. Stated up front, they would make the agent comply silently, so the user never sees the choice and nothing gets recorded. Once the user answers a fork, the resulting decision is in every later brief, and the next session follows it without asking. That contrast, asked once and then remembered, is the memory beat of the demo.
 
@@ -152,7 +152,7 @@ The brief does **not** list the seeded invariants (`source: cartographer`). They
 
 **File watcher** (chokidar on the target, minus `ignore`): any write not already reported by a hook becomes an `edited` event marked `unattributed`. Hooks give attribution and gating; the watcher guarantees completeness, since shell commands can write files without passing through the edit hooks.
 
-**Harness MCP tools** (all read-only except `submit_plan`, which only records intent): `submit_plan(steps[{ n, text, files[], imports[{ from, to }] }])`, `cell_for(path)`, `domain(id)`, `who_writes(table)`, `decisions_for(paths[])`.
+**Interpretability MCP tools** (all read-only except `submit_plan`, which only records intent): `submit_plan(steps[{ n, text, files[], imports[{ from, to }] }])`, `cell_for(path)`, `domain(id)`, `who_writes(table)`, `decisions_for(paths[])`.
 
 ## 7. Plan versus built
 

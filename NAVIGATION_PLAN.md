@@ -1,8 +1,8 @@
-# Harness navigation: build plan for the context graph
+# Interpretability navigation: build plan for the context graph
 
 **Text in, architecture out, at every depth.** Today the map is one fixed level: a domain × layer grid. This plan turns it into a navigable context graph. You can move from journeys to domains to files to functions to code without losing your place, and the agent's live activity (reading, planning, editing, getting blocked) stays visible and rolled up at whatever depth you are looking at.
 
-This plan extends `SPEC.md`; it does not replace it. Every rule in `CLAUDE.md` still holds: no model calls in the hot path, UI state is a reduction of the event log, one checker with three call sites, and Harness writes only to `domains.yaml`, `decisions/` and `.harness/` in the target.
+This plan extends `SPEC.md`; it does not replace it. Every rule in `CLAUDE.md` still holds: no model calls in the hot path, UI state is a reduction of the event log, one checker with three call sites, and Interpretability writes only to `domains.yaml`, `decisions/` and `.harness/` in the target.
 
 Research behind this plan (October 2026): three surveys covering interaction and visual references, rendering and layout tech with benchmarks, and code-fact extraction with benchmarks. Their key numbers are quoted inline. Their sources include Sourcetrail, Structurizr/C4, IcePanel, Nx, Kiali, Windsurf Codemaps, van Wijk & Nuij 2003, Heer & Robertson 2007, Furnas's degree of interest, Holten's edge bundling, and Wedge.
 
@@ -45,7 +45,7 @@ Research behind this plan (October 2026): three surveys covering interaction and
 | **Code** | A docked code pane (CodeMirror 6) opened at the symbol. Gutters show this turn's diff, plan step badges and inline violations. | File text, the turn baseline, events | Double-click a symbol, or a path link in chat |
 
 Two things cut across the levels:
-- **Wiring trace.** Pick an entry or symbol and Harness computes the call chain to its sinks (vendors, tables). It expands only along that path and dims everything else.
+- **Wiring trace.** Pick an entry or symbol and Interpretability computes the call chain to its sinks (vendors, tables). It expands only along that path and dims everything else.
 - **Turn lens.** "This turn only" hides everything the current turn didn't plan, read or edit.
 
 ## 3. Architecture
@@ -177,7 +177,7 @@ Compare them before and after the edit to classify each symbol as added, removed
 - **Off-screen activity** gets **Wedge** indicators, which were more accurate than Halo and arrows in the study.
 - **Large views:**
   - above about 1,000 visible nodes, the least interesting containers auto-collapse and everything drops to chips;
-  - above about 3,000, Harness switches to a **Sigma.js v4** read-only overview (WebGL) fed from the same layout cache (N11).
+  - above about 3,000, Interpretability switches to a **Sigma.js v4** read-only overview (WebGL) fed from the same layout cache (N11).
 - **Rollout:** the old grid stays behind `?map=v1` until N3 reaches parity.
 
 ### 3.4 Agent-aware navigation: the graph as shared context
@@ -215,7 +215,7 @@ Your accept/reject of a proposal runs on human time and never holds up a turn.
 ### 4.2 Onboarding a repo
 
 1. **Instant skeleton (under 1 s, no model).** Tier 1 scans the repo. A deterministic first map (one domain per top-level source folder, layers from folder-name heuristics) renders straight away, so you are never looking at a spinner.
-2. **History mining (seconds, no model).** `git log` provides co-change pairs (files changed in the same commit) and "commit footprints". Commits act as stand-in turns, so the map can be scored before Harness has run a single turn.
+2. **History mining (seconds, no model).** `git log` provides co-change pairs (files changed in the same commit) and "commit footprints". Commits act as stand-in turns, so the map can be scored before Interpretability has run a single turn.
 3. **Cartographer proposal (about a minute, model).** It generates K candidate maps (default 4). Each is scored deterministically (§4.5), and the best is shown assembling on the grid with its scores, for example "a typical commit lights 1.8 cells; 0 files unassigned".
 4. **You confirm** (or pick another candidate, or edit in chat: "merge Memory into Agent loop"). `domains.yaml` is committed.
 5. **Background fill-in.** Tier 2 indexes typed calls. The cartographer adds inferred labels: sub-group names inside domains, one-line symbol summaries, journey names.
@@ -356,7 +356,7 @@ The new events are all in the log, so the UI is still a reduction and replay cov
 
 Map and facts changes the demo requires (done): the reference map has a `ui` top layer, `schema.sql` files in data cells, web cells per domain, neutral `web/src/shared/**`, and a `cartography.routes` pattern for Scout's route table. Real Scout maps 72 files, none unassigned, 12 domain pairs, 11 routes, and exactly one violation.
 
-Alike (`ALIKE_INTEGRATION.md`) moves recording off the model and onto the server, anchors decisions to the architecture rather than to the violating file, reads decisions back, and isolates demo takes. The design is settled after checking Alike's real capabilities. Harness runs only against disposable copies (`npm run demo` → `../scout-run`); `../scout-agent` stays untouched at `demo-start`.
+Alike (`ALIKE_INTEGRATION.md`) moves recording off the model and onto the server, anchors decisions to the architecture rather than to the violating file, reads decisions back, and isolates demo takes. The design is settled after checking Alike's real capabilities. Interpretability runs only against disposable copies (`npm run demo` → `../scout-run`); `../scout-agent` stays untouched at `demo-start`.
 
 ## 5. Visual direction (decision D1)
 

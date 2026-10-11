@@ -22,7 +22,7 @@ export type RepoResolver = RepoResolverLike & { root: string };
 
 /**
  * Resolver for the repo at `root`. If a workspace package isn't linked under `node_modules` (no install yet), it is
- * symlinked under `<root>/.harness/ws-modules` so `exports` maps still apply (Harness may write only under `.harness/`).
+ * symlinked under `<root>/.harness/ws-modules` so `exports` maps still apply (Interpretability may write only under `.harness/`).
  */
 export function createRepoResolver(rootIn: string): RepoResolver {
   const root = fs.realpathSync(rootIn);

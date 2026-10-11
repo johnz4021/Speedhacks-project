@@ -45,7 +45,7 @@ function GridEmpty() {
   const conn = useStore((s) => s.conn);
   return (
     <div className="grid-empty">
-      <p className="grid-empty-title">{conn === 'down' ? 'Waiting for the Harness server' : 'Reading the repo'}</p>
+      <p className="grid-empty-title">{conn === 'down' ? 'Waiting for the Interpretability server' : 'Reading the repo'}</p>
       <p>{conn === 'down' ? 'Start it with HARNESS_REPO=<path> npm run dev. This page reconnects on its own.' : 'The map appears once domains.yaml is loaded or proposed.'}</p>
     </div>
   );

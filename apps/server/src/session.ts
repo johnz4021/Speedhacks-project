@@ -13,12 +13,12 @@ import type { Repo } from './repo';
 import type { Bus } from './bus';
 
 const PLAN_RULES = [
-  'Explore read-only, briefly. Then, before editing anything, call mcp__harness__submit_plan with numbered steps.',
+  'Explore read-only, briefly. Then, before editing anything, call mcp__interpretability__submit_plan with numbered steps.',
   'Each step lists the exact repo-relative file paths it will create or modify, and every new import it adds as { from: path, to: path }.',
   'If the result contains violations: ' + ASK_RULE,
   'If a violation is ALREADY DECIDED in a standing decision (DR-n), do not ask: plan it the decided way and resubmit.',
   'If a standing decision rules out the obvious approach, plan the decided way and list the avoided approach in `avoided` with the decision id.',
-  'After the user answers, resubmit the plan with mcp__harness__submit_plan, then call ExitPlanMode.',
+  'After the user answers, resubmit the plan with mcp__interpretability__submit_plan, then call ExitPlanMode.',
   'If there are no violations, call ExitPlanMode with a short plan.',
 ].join('\n');
 
@@ -85,8 +85,8 @@ export class Session {
       `- ${d.id}: ${d.title}\n  Outcome: ${d.outcome}\n  Rejected: ${d.rejected}\n  ${d.rationale.replace(/\n+/g, '\n  ')}`);
     // Seeded invariants are deliberately not listed (SPEC §6): they are enforced at plan and edit time.
     return [
-      '# Harness',
-      'You are working inside Harness, which shows the user a live domain × layer map of this repo and checks every plan and edit against its architecture rules.',
+      '# Interpretability',
+      'You are working inside Interpretability, which shows the user a live domain × layer map of this repo and checks every plan and edit against its architecture rules.',
       '',
       '## Map (domains.yaml)',
       `Layers: ${m.layers.map((l) => l.id).join(', ')}`,
@@ -97,7 +97,7 @@ export class Session {
       '',
       '## Rules',
       PLAN_RULES,
-      'Change files only with the Edit and Write tools, never through Bash (no heredocs, `sed -i` or scripts that write files): Harness checks each Edit/Write against the rules.',
+      'Change files only with the Edit and Write tools, never through Bash (no heredocs, `sed -i` or scripts that write files): Interpretability checks each Edit/Write against the rules.',
       'If an edit is denied with options A and B: ' + ASK_RULE,
     ].join('\n');
   }
@@ -115,7 +115,7 @@ export class Session {
         strictMcpConfig: true,
         systemPrompt: { type: 'preset', preset: 'claude_code', append: this.brief() },
         mcpServers: {
-          harness: harnessTools(this.repo, this.bus, {
+          interpretability: harnessTools(this.repo, this.bus, {
             onPlan: (steps, violations) => this.onPlan(steps, violations),
             takeNotes: () => this.notes.splice(0),
           }),
@@ -186,9 +186,9 @@ export class Session {
       // The server records in Alike itself, off the turn; only if the CLI fails does the session get an MCP note.
       if (process.env.HARNESS_ALIKE !== '0') void recordInAlike(this.repo, this.bus, forAlike).then((notes) => this.notes.push(...notes));
       const ids = decisions.map((d) => d.id).join(', ');
-      this.send(`${t}\n\n[Harness: recorded as ${ids || 'a decision'} in decisions/ and domains.yaml. ` +
+      this.send(`${t}\n\n[Interpretability: recorded as ${ids || 'a decision'} in decisions/ and domains.yaml. ` +
         (option === 'B' ? `${violations[0]?.file} is now an exception. ` : '') +
-        'Resubmit the plan with mcp__harness__submit_plan, then exit plan mode.]');
+        'Resubmit the plan with mcp__interpretability__submit_plan, then exit plan mode.]');
       return;
     }
     if (!this.turn) this.startTurn(t);
@@ -301,7 +301,7 @@ export class Session {
       hookSpecificOutput: {
         hookEventName: 'PreToolUse',
         permissionDecision: 'deny',
-        permissionDecisionReason: `Harness: change files in this repo with the Edit or Write tool, not through Bash (${target}), so every edit can be checked against the architecture rules. Make this change with Edit/Write instead.`,
+        permissionDecisionReason: `Interpretability: change files in this repo with the Edit or Write tool, not through Bash (${target}), so every edit can be checked against the architecture rules. Make this change with Edit/Write instead.`,
       },
     };
   };
@@ -331,7 +331,7 @@ export class Session {
     this.turn?.gateBlocks.push(...violations);
     const { open, decided } = splitDecided(violations);
     const why = [
-      'Harness blocked this edit.',
+      'Interpretability blocked this edit.',
       ...(open.length ? [violationText(open), ASK_RULE] : []),
       ...(decided.length ? [...decided.map((v) => v.reason), decidedText(this.repo.root, decided)] : []),
     ];
@@ -368,12 +368,12 @@ export class Session {
     if (name === 'ExitPlanMode') {
       const turn = this.turn;
       if (turn && !turn.planned) {
-        return { behavior: 'deny', message: 'Call mcp__harness__submit_plan with your numbered steps before exiting plan mode.' };
+        return { behavior: 'deny', message: 'Call mcp__interpretability__submit_plan with your numbered steps before exiting plan mode.' };
       }
       if (turn?.planViolations.length) {
         const { open, decided } = splitDecided(turn.planViolations);
         if (open.length) return { behavior: 'deny', message: `The plan has unresolved violations.\n${violationText(open)}\n${ASK_RULE}` };
-        return { behavior: 'deny', message: `The plan crosses a decided rule.\n${decidedText(this.repo.root, decided)}\nResubmit the plan with mcp__harness__submit_plan.` };
+        return { behavior: 'deny', message: `The plan crosses a decided rule.\n${decidedText(this.repo.root, decided)}\nResubmit the plan with mcp__interpretability__submit_plan.` };
       }
       const plan = String((input as { plan?: unknown }).plan ?? '');
       this.bus.emit('approval_requested', { plan });

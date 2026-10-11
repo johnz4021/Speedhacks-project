@@ -57,7 +57,7 @@ function TurnRail() {
     <aside className="v2-rail">
       <div className="v2-brand">
         <span className="v2-brand-mark" aria-hidden="true"><span /><span /><span /><span /></span>
-        <span className="v2-brand-name">Harness</span>
+        <span className="v2-brand-name">Interpretability</span>
         <span className="v2-brand-repo">{repo || 'scout-agent'}</span>
       </div>
       {turn && (

@@ -1,6 +1,6 @@
 // Server wiring for Tier 2 and the N5 leftovers, on temp git copies of the fixture repo (no model calls: fake
 // proposers only): facts_resolved from the semantic child, the SemanticStore behind the graph tools and the living
-// map, config-file rescans (Harness's own domains.yaml writes don't rescan), barrel relinks, and onboarding.
+// map, config-file rescans (Interpretability's own domains.yaml writes don't rescan), barrel relinks, and onboarding.
 import { afterAll, describe, expect, it } from 'vitest';
 import { appendFileSync, cpSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -99,14 +99,14 @@ describe('Tier 2 on the server', () => {
 });
 
 describe('config-file rescans', () => {
-  it('rescans on package.json / tsconfig changes and user edits of domains.yaml, never on Harness\'s own writes', () => {
+  it('rescans on package.json / tsconfig changes and user edits of domains.yaml, never on Interpretability\'s own writes', () => {
     const { root, repo, of } = setup();
     repo.scan();
     const scans = () => of('repo_scanned').length;
     expect(scans()).toBe(1);
 
-    // Harness writes domains.yaml the way decisions/accept do: file, then setMap with the same text.
-    const own = `${mapYaml}\n# exception recorded by Harness\n`;
+    // Interpretability writes domains.yaml the way decisions/accept do: file, then setMap with the same text.
+    const own = `${mapYaml}\n# exception recorded by Interpretability\n`;
     writeFileSync(repo.mapPath, own);
     repo.setMap(own);
     expect(repo.applyConfigChanges(['domains.yaml'])).toBe(false);
@@ -132,7 +132,7 @@ describe('config-file rescans', () => {
     expect(repo.fileFacts.get('src/channels/cli.ts')!.entries.map((e) => e.id)).toContain('entry:bin:scoutctl');
   });
 
-  it('the watcher triggers them (tsconfig.json), and ignores Harness\'s own domains.yaml write', async () => {
+  it('the watcher triggers them (tsconfig.json), and ignores Interpretability\'s own domains.yaml write', async () => {
     const { root, repo, of } = setup();
     repo.scan();
     repo.startWatcher();
@@ -142,7 +142,7 @@ describe('config-file rescans', () => {
     for (let i = 0; i < 40 && scans() < 2; i++) await sleep(100);
     expect(scans()).toBe(2);
 
-    const own = `${repo.mapText}\n# written by Harness\n`;
+    const own = `${repo.mapText}\n# written by Interpretability\n`;
     writeFileSync(repo.mapPath, own);
     repo.setMap(own);
     await sleep(900);

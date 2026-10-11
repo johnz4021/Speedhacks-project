@@ -12,7 +12,7 @@ export function Header() {
         <span className="brand-mark" aria-hidden="true">
           <span /><span /><span /><span />
         </span>
-        <span className="brand-name">Harness</span>
+        <span className="brand-name">Interpretability</span>
         {name && <span className="brand-repo">{name}</span>}
         {conn === 'down' && <span className="conn-down">Server not reachable. Reconnecting…</span>}
       </div>

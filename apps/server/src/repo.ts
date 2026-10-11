@@ -187,8 +187,8 @@ export class Repo {
   }
 
   /**
-   * A config file changed on disk (watcher): `domains.yaml` reloads the map unless its text is what Harness itself last
-   * loaded (every Harness write goes through `setMap`, so its own writes never rescan); `package.json`, `tsconfig*.json`
+   * A config file changed on disk (watcher): `domains.yaml` reloads the map unless its text is what Interpretability itself last
+   * loaded (every Interpretability write goes through `setMap`, so its own writes never rescan); `package.json`, `tsconfig*.json`
    * and `pnpm-workspace.yaml` rebuild the resolver and entries. Either way the facts are rescanned once.
    * Returns whether a rescan ran.
    */

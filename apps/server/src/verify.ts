@@ -60,7 +60,7 @@ async function verifyABC(settingSources: SettingSource[]) {
   const toolCalls: string[] = [];
 
   const harness = createSdkMcpServer({
-    name: 'harness',
+    name: 'interpretability',
     version: '0.0.1',
     tools: [
       tool(
@@ -80,7 +80,7 @@ async function verifyABC(settingSources: SettingSource[]) {
   const observe: HookCallback = async (input) => {
     const i = input as PreToolUseHookInput;
     toolCalls.push(i.tool_name);
-    if (i.tool_name === 'mcp__harness__submit_plan') results.a_permissionModeAtCall = i.permission_mode ?? '';
+    if (i.tool_name === 'mcp__interpretability__submit_plan') results.a_permissionModeAtCall = i.permission_mode ?? '';
     if (denyAt >= 0 && toolCalls.length - 1 > denyAt) results.c_toolsAfterDeny.push(i.tool_name);
     return { async: true };
   };
@@ -113,7 +113,7 @@ async function verifyABC(settingSources: SettingSource[]) {
       setTimeout(() => q.setPermissionMode('acceptEdits').catch((e) => log('setPermissionMode failed', e)), 0);
       return { behavior: 'allow', updatedInput: input };
     }
-    if (name.startsWith('mcp__harness__')) return { behavior: 'allow', updatedInput: input };
+    if (name.startsWith('mcp__interpretability__')) return { behavior: 'allow', updatedInput: input };
     return { behavior: 'deny', message: `${name} is not available in this session.` };
   };
 
@@ -130,10 +130,10 @@ async function verifyABC(settingSources: SettingSource[]) {
       permissionMode: 'plan',
       settingSources,
       planModeInstructions:
-        'Explore briefly (at most 3 reads). Then call mcp__harness__submit_plan with numbered steps, each listing exact file paths and new imports (from path → to path). Then call ExitPlanMode.',
+        'Explore briefly (at most 3 reads). Then call mcp__interpretability__submit_plan with numbered steps, each listing exact file paths and new imports (from path → to path). Then call ExitPlanMode.',
       systemPrompt: { type: 'preset', preset: 'claude_code', append: 'Never work around a denied edit. If an edit is denied with options, ask the user and wait.' },
-      mcpServers: { harness },
-      allowedTools: ['mcp__harness__submit_plan'],
+      mcpServers: { interpretability: harness },
+      allowedTools: ['mcp__interpretability__submit_plan'],
       disallowedTools: ['AskUserQuestion'],
       hooks: {
         PreToolUse: [

@@ -32,7 +32,7 @@ export type OnboardingResult = {
   cost: number | null;
 };
 
-const HEADER = '# Proposed by the Harness cartographer and confirmed by the user.\n# Domains are columns, layers are rows. Edges are derived from imports, never declared.\n\n';
+const HEADER = '# Proposed by the Interpretability cartographer and confirmed by the user.\n# Domains are columns, layers are rows. Edges are derived from imports, never declared.\n\n';
 
 /**
  * Ask the proposer for `k` candidate maps for a repo with no map yet, score each (lower total wins; invalid YAML is

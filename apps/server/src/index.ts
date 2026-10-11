@@ -142,7 +142,7 @@ app.get('/api/file', (c) => {
 const shellDist = resolve(here, '../../shell/dist');
 if (existsSync(shellDist)) app.use('/*', serveStatic({ root: shellDist }));
 
-const server = serve({ fetch: app.fetch, port: PORT }, () => console.log(`Harness server on http://localhost:${PORT} · repo ${REPO}`));
+const server = serve({ fetch: app.fetch, port: PORT }, () => console.log(`Interpretability server on http://localhost:${PORT} · repo ${REPO}`));
 const wss = new WebSocketServer({ server: server as never, path: '/ws' });
 wss.on('connection', (ws) => {
   sockets.add(ws);

@@ -1,9 +1,9 @@
-// History units (Harness turns and git commits) that maps are scored and drift is measured against.
+// History units (Interpretability turns and git commits) that maps are scored and drift is measured against.
 import type { UIState } from '../events';
 import type { HistoryTurn } from '../contracts/cartography';
 
 /**
- * Harness turns as history units: the files each turn edited (attributed or not), in log order.
+ * Interpretability turns as history units: the files each turn edited (attributed or not), in log order.
  * Turns that only read are skipped; they say nothing about where change lands.
  */
 export function historyFromUI(ui: UIState): HistoryTurn[] {
