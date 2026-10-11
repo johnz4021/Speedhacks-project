@@ -33,6 +33,8 @@ type V2Store = {
   hot: Record<string, string[]>;
   /** File id → how many of its symbols this turn changed. */
   symbols: Record<string, number>;
+  /** Table id → its columns, from the schema file that defines it. */
+  columns: Record<string, string[]>;
   cursor: ProjectionCursor | null;
 
   /** Navigate to a place (pushes history unless it is the same place). */
@@ -42,7 +44,7 @@ type V2Store = {
   goForward(): void;
   setPalette(open: boolean): void;
   toggleMinimap(): void;
-  publish(p: { nodes: VisibleNode[]; edges: VisibleEdge[]; hot: Record<string, string[]>; symbols: Record<string, number>; cursor: ProjectionCursor | null }): void;
+  publish(p: { nodes: VisibleNode[]; edges: VisibleEdge[]; hot: Record<string, string[]>; symbols: Record<string, number>; columns: Record<string, string[]>; cursor: ProjectionCursor | null }): void;
 };
 
 const same = (a: unknown, b: unknown) => a === b || JSON.stringify(a) === JSON.stringify(b);
@@ -62,6 +64,7 @@ export const useV2 = create<V2Store>((set, get) => ({
   edges: {},
   hot: {},
   symbols: {},
+  columns: {},
   cursor: null,
 
   go: (next, fly = null) => {
@@ -103,6 +106,6 @@ export const useV2 = create<V2Store>((set, get) => ({
     }
     const hot: Record<string, string[]> = {};
     for (const [k, v] of Object.entries(p.hot)) hot[k] = prev.hot[k] && same(prev.hot[k], v) ? prev.hot[k]! : v;
-    set({ nodes, edges, hot, symbols: same(prev.symbols, p.symbols) ? prev.symbols : p.symbols, cursor: same(prev.cursor, p.cursor) ? prev.cursor : p.cursor });
+    set({ nodes, edges, hot, symbols: same(prev.symbols, p.symbols) ? prev.symbols : p.symbols, columns: same(prev.columns, p.columns) ? prev.columns : p.columns, cursor: same(prev.cursor, p.cursor) ? prev.cursor : p.cursor });
   },
 }));

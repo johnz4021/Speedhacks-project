@@ -480,3 +480,17 @@
   .v2-enter, .v2-edge.is-enter, .v2-edge.is-enter .v2-edge-line { animation: none !important; }
   .v2-cursor { transition: none; }
 }
+
+/* ------------------------------------------------------------ beat 4: an approach a standing decision rules out */
+.v2-edge.is-rejected .v2-edge-line { fill: none; stroke: var(--v2-ink); stroke-width: 3.4px; stroke-dasharray: 12 7; }
+.v2-arrowhead.is-rejected { fill: var(--v2-ink); }
+.v2-strike { fill: none; stroke: var(--v2-ink); stroke-linecap: round; }
+.v2-rejected-tag rect { fill: var(--v2-ink); }
+.v2-rejected-tag text { fill: var(--v2-ground); font-family: var(--v2-sans); font-weight: 600; letter-spacing: 0.01em; }
+.v2-edge.is-rejected.is-selected .v2-rejected-tag rect { fill: var(--v2-agent); }
+.v2-chip-cols { margin-left: auto; font: 500 12.5px/1 var(--v2-sans); color: var(--v2-ink-3); white-space: nowrap; }
+.v2-edges.is-top { z-index: 1500; }
+.v2-rejected { pointer-events: auto; cursor: pointer; }
+.v2-rejected.is-selected .v2-rejected-tag rect { fill: var(--v2-agent); }
+.v2-colhead-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.v2-cursor { z-index: 1400; }

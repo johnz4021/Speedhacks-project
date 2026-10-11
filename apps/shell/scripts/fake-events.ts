@@ -61,14 +61,14 @@ const PROMPT = "Add a tool that summarizes a prospect's latest 10-K.";
 const dr1: Violation = {
   invariant: 'DR-1',
   kind: 'only_via',
-  reason: `${NEW_TOOL} imports vendor/llm-openai/index.ts, but DR-1: Model providers are only called through the model gateway.`,
+  reason: `${NEW_TOOL} imports vendor/llm-anthropic/index.ts, but DR-1: Model providers are only called through the model gateway.`,
   file: NEW_TOOL,
-  detail: `${NEW_TOOL} → vendor/llm-openai/index.ts`,
+  detail: `${NEW_TOOL} → vendor/llm-anthropic/index.ts`,
   options: [
-    'Route it through the Model gateway (every model call, with redaction and cost logging) instead of importing vendor/llm-openai/index.ts directly',
+    'Route it through the Model gateway (every model call, with redaction and cost logging) instead of importing vendor/llm-anthropic/index.ts directly',
     `Add an exception for ${NEW_TOOL} and record why`,
   ],
-  target: 'vendor/llm-openai/index.ts',
+  target: 'vendor/llm-anthropic/index.ts',
 };
 
 // ---------------------------------------------------------------- turn start + exploration
@@ -78,13 +78,13 @@ ev('looked', { tool: 'Read' }, { path: 'src/tools/index.ts', cell: TOOLS_LOGIC, 
 ev('looked', { tool: 'Read' }, { path: 'src/tools/news-summarize.ts', cell: TOOLS_LOGIC });
 ev('cursor', { verb: 'searching' }, { path: 'vendor/sec-edgar', cell: TOOLS_EXT });
 ev('looked', { tool: 'Read' }, { path: 'vendor/sec-edgar/index.ts', cell: TOOLS_EXT });
-ev('looked', { tool: 'Read' }, { path: 'vendor/llm-openai/index.ts', cell: GW_EXT });
-ev('chat', { role: 'assistant', text: "I'll model the new tool on `news-summarize.ts`: fetch the filing from SEC EDGAR, then summarize it with the same OpenAI call." });
+ev('looked', { tool: 'Read' }, { path: 'vendor/llm-anthropic/index.ts', cell: GW_EXT });
+ev('chat', { role: 'assistant', text: "I'll model the new tool on `news-summarize.ts`: fetch the filing from SEC EDGAR, then summarize it with the same Anthropic call." });
 
 // ---------------------------------------------------------------- first plan: copies the bypass
 const steps1 = [
   { n: 1, text: 'Add fetchLatest10K() to the SEC EDGAR client', files: ['vendor/sec-edgar/index.ts'], imports: [] },
-  { n: 2, text: 'Create the filing-summary tool, modeled on news-summarize', files: [NEW_TOOL], imports: [{ from: NEW_TOOL, to: 'vendor/sec-edgar/index.ts' }, { from: NEW_TOOL, to: 'vendor/llm-openai/index.ts' }] },
+  { n: 2, text: 'Create the filing-summary tool, modeled on news-summarize', files: [NEW_TOOL], imports: [{ from: NEW_TOOL, to: 'vendor/sec-edgar/index.ts' }, { from: NEW_TOOL, to: 'vendor/llm-anthropic/index.ts' }] },
   { n: 3, text: 'Register filingSummary in the tool index', files: ['src/tools/index.ts'], imports: [] },
   { n: 4, text: 'Add a test with a recorded filing', files: [NEW_TEST], imports: [] },
 ];
@@ -94,11 +94,11 @@ ev('planned', {
     { domain: 'tools', layer: 'external', steps: [1], files: ['vendor/sec-edgar/index.ts'] },
     { domain: 'tools', layer: 'logic', steps: [2, 3], files: [NEW_TOOL, 'src/tools/index.ts'] },
   ],
-  edges: [{ from: 'tools', to: 'gateway', steps: [2], imports: [{ from: NEW_TOOL, to: 'vendor/llm-openai/index.ts' }] }],
+  edges: [{ from: 'tools', to: 'gateway', steps: [2], imports: [{ from: NEW_TOOL, to: 'vendor/llm-anthropic/index.ts' }] }],
   unassigned: [],
 }, { gap: 2400 });
 ev('plan_violation', { violation: dr1 }, { gap: 40 });
-const ask = 'My plan crosses **DR-1**: `filing-summary.ts` would call OpenAI directly, like `news-summarize.ts` does. Which do you want?\n\n- **A**: route it through `gateway.complete()`, with redaction and cost logging\n- **B**: add an exception for `filing-summary.ts` and record why';
+const ask = 'My plan crosses **DR-1**: `filing-summary.ts` would call Anthropic directly, like `news-summarize.ts` does. Which do you want?\n\n- **A**: route it through `gateway.complete()`, with redaction and cost logging\n- **B**: add an exception for `filing-summary.ts` and record why';
 ev('chat', { role: 'assistant', text: ask }, { gap: 2200 });
 ev('fork_asked', { violations: [dr1], text: ask }, { gap: 30 });
 

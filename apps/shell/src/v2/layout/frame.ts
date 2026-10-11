@@ -33,6 +33,8 @@ export type FrameEdge = {
   to: string;
   /** Drawn faintly: outside the focus region. A trunk merges several such edges between two columns. */
   faint: boolean;
+  /** A ghost a standing decision rules out: drawn struck through, "rejected in DR-4, session 1". */
+  decision: { id: string; session: number } | null;
   trunk: string[] | null;
 };
 export type Col = { id: string; name: string; purpose: string; x: number; w: number; spine: boolean; open: boolean; index: number };
@@ -324,7 +326,7 @@ export function buildFrame({ projection: p, meta, layouts, region, key }: FrameI
     for (let n = ix.byId.get(id); n; n = ix.byId.get(n.parent ?? '')) if (roots.has(n.id)) return true;
     return false;
   };
-  const loud = (e: VisibleEdge) => e.status !== 'existing' || e.violation !== null;
+  const loud = (e: VisibleEdge) => e.status !== 'existing' || e.violation !== null || !!e.decision;
   const drawn = drawnEdges(p).filter((e) => boxes[e.from] && boxes[e.to]);
   const full: VisibleEdge[] = [];
   const faintInside: VisibleEdge[] = [];
@@ -370,7 +372,7 @@ export function buildFrame({ projection: p, meta, layouts, region, key }: FrameI
   const push = (e: VisibleEdge, pts: Pt[] | null, faint: boolean, trunk: string[] | null, id = e.id, count = e.count) => {
     if (!pts || pts.length < 2) return;
     pts = dedupe(pts);
-    edges.push({ id, d: roundedPath(pts, 8), status: e.status, violation: e.violation, count, steps: e.steps, mid: midpoint(pts), from: e.from, to: e.to, faint, trunk });
+    edges.push({ id, d: roundedPath(pts, 8), status: e.status, violation: e.violation, count, steps: e.steps, mid: midpoint(pts), from: e.from, to: e.to, faint, trunk, decision: e.decision ?? null });
   };
   // Lanes are taken in a fixed order (existing, new, ghost; then faint) so they stay put as a turn adds edges.
   const rank = { existing: 0, new: 1, ghost: 2 } as const;

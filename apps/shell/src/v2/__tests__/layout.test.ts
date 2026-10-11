@@ -27,7 +27,7 @@ function addFile(path: string, domain: string, layer: string, imports: string[])
 const memo = graphMemo();
 function sceneFor(events: HarnessEvent[], open: string[]): Scene {
   const ui = reduce(events);
-  return sceneOf(ui, memo(ui)!, null, open);
+  return sceneOf(ui, memo(ui)!, ui.turns.at(-1)?.id ?? null, open);
 }
 
 async function frameFor(scene: Scene, region: string[] | null = scene.open.length ? scene.open : null): Promise<Frame> {
@@ -151,6 +151,18 @@ describe('v2 layout: grid, ports and declutter', () => {
   });
 });
 
+describe('v2 layout: beat 4', () => {
+  it('draws an approach a decision rules out as a rejected edge, in full, with the decision and session', async () => {
+    const log = JSON.parse(readFileSync(fileURLToPath(new URL('../../../public/beat4-events.json', import.meta.url)), 'utf8')) as HarnessEvent[];
+    const s = sceneFor(log, []);
+    const f = await frameFor(s, []);
+    const rejected = f.edges.filter((e) => e.decision);
+    expect(rejected.map((e) => [e.from, e.to, e.decision, e.faint])).toEqual([['cell:tools/logic', 'cell:outreach/logic', { id: 'DR-4', session: 1 }, false]]);
+    // with an empty region, quiet edges recede to trunks
+    expect(f.edges.filter((e) => !e.decision && e.status === 'existing' && !e.violation).every((e) => e.faint)).toBe(true);
+  });
+});
+
 describe('v2 navigation', () => {
   const s = sceneFor(base, []);
   const g = s.graph;
@@ -169,7 +181,8 @@ describe('v2 navigation', () => {
     expect(d.open).toEqual(['domain:tools']);
     const back = up(g, { ...d, focus: 'src/tools/web-search.ts' });
     expect(back.focus).toBe('cell:tools/logic');
-    expect(back.open).toEqual(['cell:tools/entry', 'cell:tools/external'].filter((c) => g.nodes[c]));
+    expect(back.open).toEqual((g.children['domain:tools'] ?? []).filter((c) => c.startsWith('cell:') && c !== 'cell:tools/logic'));
+    expect(back.open.length).toBeGreaterThan(0);
   });
 
   it('jumps to a symbol by opening its cell and focusing its file', () => {

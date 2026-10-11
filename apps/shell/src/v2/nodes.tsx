@@ -188,10 +188,12 @@ export const ChipNode = memo(function ChipNode({ id }: NodeProps) {
   const n = useNode(id);
   const lod = useLod();
   const marks = useMarks(id);
+  const cols = useV2((s) => s.columns[id]);
   if (!n) return null;
   return (
-    <div className={`v2-chip is-${n.kind} ${stateClasses(n.rollup, false)} ${marks}`}>
-      {lod !== 'far' && <><span className="v2-chip-kind">{n.kind === 'table' ? 'table' : n.kind}</span><span className="v2-chip-name">{n.label}</span></>}
+    <div className={`v2-chip is-${n.kind} ${stateClasses(n.rollup, false)} ${marks}`} title={cols?.join(', ')}>
+      {lod !== 'far' && <><span className="v2-chip-kind">{n.kind}</span><span className="v2-chip-name">{n.label}</span></>}
+      {lod !== 'far' && cols && <span className="v2-chip-cols">{cols.length} columns</span>}
     </div>
   );
 });

@@ -3,7 +3,7 @@
 // React Flow viewport with memoized DOM nodes. Navigation: expand in place, breadcrumbs, history, ⌘K, arrows, minimap.
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { Background, BackgroundVariant, MiniMap, ReactFlow, ReactFlowProvider, ViewportPortal, useReactFlow, useStoreApi, type Node, type Viewport } from '@xyflow/react';
+import { Background, BackgroundVariant, MiniMap, ReactFlow, ReactFlowProvider, ViewportPortal, useReactFlow, useStore as useFlow, useStoreApi, type Node, type Viewport } from '@xyflow/react';
 import '@xyflow/react/dist/base.css';
 import '@fontsource/barlow/300.css';
 import '@fontsource/barlow/400-italic.css';
@@ -13,7 +13,7 @@ import './v2.css';
 import { fileOf, type Rollup } from '@harness/core/view';
 import { useView } from '../derive';
 import { useStore } from '../store';
-import { buildFrame, GAP_X, layoutAll, strokeFor, union, UNASSIGNED, UNASSIGNED_COL, type Frame, type FrameNode } from './layout/frame';
+import { buildFrame, GAP_X, layoutAll, strokeFor, union, UNASSIGNED, UNASSIGNED_COL, type Frame, type FrameEdge, type FrameNode } from './layout/frame';
 import { clearLayoutCache, layoutContainer, warmElk } from './layout/elk';
 import type { Box } from './layout/containers';
 import { dive, neighbour, up, type Dir } from './nav';
@@ -69,7 +69,9 @@ function regionOf(scene: Scene, sel: string | null): string[] | null {
   const ids = new Set(scene.projection.nodes.map((n) => n.id));
   if (sel && ids.has(sel)) return [sel];
   const open = scene.open.filter((id) => ids.has(id));
-  return open.length ? open : null;
+  if (open.length) return open;
+  // A plan that declines an approach (beat 4): the struck-through edge leads; quiet edges recede to trunks.
+  return scene.projection.edges.some((e) => e.decision) ? [] : null;
 }
 
 function Inner({ insets, chrome }: { insets: Insets; chrome: boolean }) {
@@ -214,6 +216,7 @@ function Inner({ insets, chrome }: { insets: Insets; chrome: boolean }) {
         {shown && (
           <ViewportPortal>
             <EdgeLayer frame={shown.frame} enter={shown.enter} />
+            <RejectedTop frame={shown.frame} />
             <Cursor frame={shown.frame} />
           </ViewportPortal>
         )}
@@ -267,7 +270,12 @@ function publish(s: Scene) {
     const k = d ? new Set([...d.added, ...d.removed, ...d.sig, ...d.body, ...d.renamed.map((r) => r[1])]).size : 0;
     if (k) symbols[n.id] = k;
   }
-  useV2.getState().publish({ nodes: s.projection.nodes, edges: s.projection.edges, hot: hotLabels(s.graph, s.activity, s.projection), symbols, cursor: s.projection.cursor });
+  const columns: Record<string, string[]> = {};
+  for (const n of s.projection.nodes) {
+    const c = n.kind === 'table' ? s.graph.nodes[n.id]?.columns : undefined;
+    if (c?.length) columns[n.id] = c;
+  }
+  useV2.getState().publish({ columns, nodes: s.projection.nodes, edges: s.projection.edges, hot: hotLabels(s.graph, s.activity, s.projection), symbols, cursor: s.projection.cursor });
 }
 
 
@@ -325,7 +333,7 @@ const EdgeLayer = memo(function EdgeLayer({ frame, enter }: { frame: Frame; ente
   return (
     <svg className="v2-edges" width={1} height={1}>
       <defs>
-        {(['existing', 'new', 'ghost', 'violation'] as const).map((k) => (
+        {(['existing', 'new', 'ghost', 'violation', 'rejected'] as const).map((k) => (
           <marker key={k} id={`v2-arrow-${k}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
             <path d="M0,1 L9,5 L0,9 z" className={`v2-arrowhead is-${k}`} />
           </marker>
@@ -333,6 +341,7 @@ const EdgeLayer = memo(function EdgeLayer({ frame, enter }: { frame: Frame; ente
       </defs>
       <path className="v2-ticks" d={frame.gutters.x.flatMap((x) => frame.gutters.y.map((y) => `M${x - 6},${y}h12M${x},${y - 6}v12`)).join('')} />
       {frame.edges.map((e) => {
+        if (e.decision) return <Rejected key={e.id} e={e} enter={enter} sel={sel} onSelect={() => select(sel === e.id ? null : { link: e.id })} />;
         const kind = e.violation ? 'violation' : e.status;
         const entering = enter.edges.has(e.id);
         const id = e.trunk ? e.trunk[0]! : e.id;
@@ -365,6 +374,53 @@ const EdgeLayer = memo(function EdgeLayer({ frame, enter }: { frame: Frame; ente
     </svg>
   );
 });
+
+export const rejectedLabel = (d: { id: string; session: number }) => `rejected in ${d.id}${d.session ? `, session ${d.session}` : ''}`;
+
+/**
+ * Beat 4's hero: an approach a standing decision rules out. Drawn struck through in ink (not red: nothing is being
+ * crossed, it is being declined), with a slash across its middle and a label that stays readable at any zoom.
+ */
+function Rejected({ e, enter, sel, onSelect }: { e: FrameEdge; enter: Enter; sel: string | null; onSelect: () => void }) {
+  return (
+    <g data-edge={e.id} className={`v2-edge is-rejected ${enter.edges.has(e.id) ? 'is-enter' : ''} ${sel === e.id ? 'is-selected' : ''}`} onClick={(ev) => { ev.stopPropagation(); onSelect(); }}>
+      <title>{`${rejectedLabel(e.decision!)}: ${e.count} planned ${e.count === 1 ? 'link' : 'links'} not built`}</title>
+      <path className="v2-edge-hit" d={e.d} />
+      <path className="v2-edge-line" d={e.d} markerEnd="url(#v2-arrow-rejected)" />
+    </g>
+  );
+}
+
+/** The strike and the label of rejected edges, above the nodes and at a constant on-screen size (about 15 px). */
+function RejectedTop({ frame }: { frame: Frame }) {
+  const k = useFlow((s) => s.transform[2]);
+  const sel = useStore((s) => selectedEdge(s.selection));
+  const select = useStore((s) => s.select);
+  const list = frame.edges.filter((e) => e.decision);
+  if (!list.length) return null;
+  const z = 1 / Math.max(k, 0.2);
+  return (
+    <svg className="v2-edges is-top" width={1} height={1}>
+      {list.map((e) => {
+        const label = rejectedLabel(e.decision!);
+        const fs = 15 * z;
+        const w = label.length * fs * 0.5 + 24 * z;
+        const h = 28 * z;
+        const s = 10 * z;
+        const { x, y } = e.mid;
+        return (
+          <g key={e.id} className={`v2-rejected ${sel === e.id ? 'is-selected' : ''}`} onClick={(ev) => { ev.stopPropagation(); select(sel === e.id ? null : { link: e.id }); }}>
+            <path className="v2-strike" d={`M${x - s},${y + s}L${x + s},${y - s}M${x - s + 7 * z},${y + s}L${x + s + 7 * z},${y - s}`} style={{ strokeWidth: 3.5 * z }} />
+            <g transform={`translate(${(x - w / 2).toFixed(1)},${(y - h - 14 * z).toFixed(1)})`} className="v2-rejected-tag">
+              <rect width={w} height={h} rx={h / 2} />
+              <text x={w / 2} y={h / 2} dy="0.35em" textAnchor="middle" style={{ fontSize: fs }}>{label}</text>
+            </g>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
 
 /** One dot that travels once along an edge that was just added (never loops). */
 function Pulse({ d }: { d: string }) {

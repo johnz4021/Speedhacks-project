@@ -116,6 +116,7 @@ type EdgeDetail = {
   where: string; // "Logic to External"
   state: 'existing' | 'new' | 'ghost';
   gate: boolean; // a ghost the edit gate blocked (never planned)
+  decision?: { id: string; session: number } | null; // a ghost a standing decision rules out
   violation: boolean;
   steps: number[];
   files: ImportEdge[];
@@ -147,7 +148,7 @@ function LinkBody({ v, id, map, openFile }: { v: View; id: string; map: DomainMa
   }
   const d: EdgeDetail = {
     from: a?.domain ?? e.from, to: b?.domain ?? e.to, where: `${a?.label ?? e.from} to ${b?.label ?? e.to}`,
-    state: e.status, gate: e.leafEdges.every((l) => l.startsWith('gate|')), violation: e.violation !== null, steps: e.steps, files,
+    state: e.status, gate: e.leafEdges.every((l) => l.startsWith('gate|')), violation: e.violation !== null, steps: e.steps, files, decision: e.decision ?? null,
   };
   return <EdgeView v={v} d={d} map={map} openFile={openFile} kinds={e.kinds} />;
 }
@@ -160,7 +161,10 @@ function EdgeView({ v, d, map, openFile, kinds }: { v: View; d: EdgeDetail; map:
     (i) => (i.kind === 'no_edge' && i.from === from && i.to === to) || (i.kind === 'only_via' && files.some((f) => i.targets.some((t) => globRe(t).test(f.to)))),
   );
   const prov = provenance(v.ui, { edge: `${from}->${to}` });
-  const state = d.state === 'ghost'
+  const dec = d.decision && v.ui.decisions.find((x) => x.id === d.decision!.id);
+  const state = d.decision
+    ? `Rejected in ${d.decision.id}${d.decision.session ? `, session ${d.decision.session}` : ''}${dec ? `: ${dec.title}` : ''}. Not built.`
+    : d.state === 'ghost'
     ? d.gate ? 'Blocked at edit: the import was never written' : `Planned in ${stepList(d.steps)}, not built yet`
     : d.state === 'new' ? `Added in turn ${v.turnIndex}` : 'On the map before this turn';
   const imports = !kinds || kinds.every((k) => k === 'imports');
@@ -168,7 +172,7 @@ function EdgeView({ v, d, map, openFile, kinds }: { v: View; d: EdgeDetail; map:
     <>
       <h2 className="insp-title">{name(from)} <span className="insp-arrow">→</span> {name(to)}</h2>
       <p className="insp-sub">{d.where}. Derived from {imports ? 'imports' : kinds!.join(', ')}; flow down a column is not drawn.</p>
-      <p className={`insp-state ${d.violation ? 'is-red' : ''}`}>{state}</p>
+      <p className={`insp-state ${d.decision ? 'is-decided' : d.violation ? 'is-red' : ''}`}>{state}</p>
       {vios.length > 0 && <Section title="Rules crossed">{vios.map(({ v: x, source }, i) => <ViolationItem key={i} v={x} source={source} />)}</Section>}
       <Section title={`${imports ? 'Imports' : 'Links'} (${files.length})`}>
         <ul className="insp-imports">
@@ -245,6 +249,18 @@ function NodeBody({ v, id, map, openFile }: { v: View; id: string; map: DomainMa
           </ul>
         </Section>
         {invs.length > 0 && <Section title="Rules for this domain">{invs.map((i) => <InvariantItem key={i.id} inv={i} />)}</Section>}
+      </>
+    );
+  }
+  const columns = useV2((s) => s.columns[id]);
+  if (node?.kind === 'table') {
+    return (
+      <>
+        <h2 className="insp-title">{node.label} <span className="insp-layer">table</span></h2>
+        {domain && <p className="insp-sub">Owned by {domain.name}</p>}
+        <Section title={`Columns (${columns?.length ?? 0})`}>
+          {columns?.length ? <ul className="insp-files">{columns.map((c) => <li key={c}><code>{c}</code></li>)}</ul> : <p className="insp-note">No schema file defines it.</p>}
+        </Section>
       </>
     );
   }
