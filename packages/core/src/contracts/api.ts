@@ -10,8 +10,12 @@ import type { DriftSignal, DriftThresholds, HistoryTurn, MapScore, ProposalChang
 export type TurnActivity = {
   turn: string | null;
   leaves: Record<string, LeafActivity>;
-  /** file → file planned imports not built yet; gate-blocked imports join with `steps: []` and violation `new`. */
-  plannedEdges: { from: string; to: string; steps: number[]; violation: ViolationState }[];
+  /**
+   * file → file planned imports not built yet; gate-blocked imports join with `steps: []`, violation `new` and
+   * `source: 'gate'`; approaches the plan avoids (`source: 'avoided'`) join between their nodes (files, or the cell a
+   * missing file or a domain maps to). `decision` marks a ghost a standing decision rules out (drawn struck through).
+   */
+  plannedEdges: { from: string; to: string; steps: number[]; violation: ViolationState; source?: 'gate' | 'avoided'; decision?: { id: string; session: number } | null }[];
   addedEdges: string[]; // GraphEdge ids added this turn
   cursor: string | null; // leaf id the agent is on (its cell when the path is not a leaf, e.g. a searched directory)
   verb: string | null; // what the agent is doing there ('reading' | 'searching' | 'editing')

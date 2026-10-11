@@ -166,6 +166,11 @@ export function buildGraph(
   });
   const ensureTable = (id: string) => nodes[id] ?? add({ id, kind: 'table', parent: ensureTop(UNASSIGNED_ID).id, label: id.slice(6) }, KIND_RANK.table!);
 
+  // ---- table columns, from schema files (`CREATE TABLE`); the table stays under the cell that lists it
+  for (const path of placement.keys()) {
+    for (const t of facts[path]?.tables ?? []) ensureTable(tableId(t.name)).columns = [...t.columns];
+  }
+
   // ---- vendors: claimed by an `external` cell (importing domains first), else the top-level Vendors group
   const callsOf = (path: string, f: FileFacts): CallFact[] => {
     const s = semantic[path];
@@ -228,6 +233,7 @@ export function buildGraph(
     const s = semantic[path];
     if (s && s.hash === f.hash) for (const im of s.implements) edge('implements', resolve(im.from), resolve(im.to), path, 1);
     for (const w of f.writes) edge('writes', w.symbol ? resolve(w.symbol) : path, ensureTable(tableId(w.table)).id, path, 1);
+    for (const r of f.reads ?? []) edge('reads', r.symbol ? resolve(r.symbol) : path, ensureTable(tableId(r.table)).id, path, 1);
     for (const r of f.routes) if (r.handler) edge('handles', r.id, resolve(r.handler), path, 1);
     if (!local.length) continue;
     for (const e of local.sort((a, b) => (a.id < b.id ? -1 : 1))) edges.push(e);

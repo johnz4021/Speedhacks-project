@@ -1,5 +1,6 @@
 // activityFor: the selected turn's activity per leaf (file and symbol ids), a pure read of the reduced UI state.
-import type { UIState } from '../events';
+import { sessionNumber, type UIState } from '../events';
+import { createMapper } from '../mapper';
 import type { TurnActivity } from '../contracts/api';
 import { cellId, edgeId, fileOf, type ContextGraph, type LeafActivity, type ProposalMark, type ViolationState } from '../contracts/graph';
 import { byId, edgeIds, outEdges } from './util';
@@ -138,13 +139,20 @@ export function activityFor(ui: UIState, graph: ContextGraph, turnId: string | n
 
   // planned imports not yet built (a planned domain edge disappears only once all of its imports exist, as in edgeViews)
   const plannedEdges: TurnActivity['plannedEdges'] = [];
+  /** "rejected in DR-4, session 1": the decision and the 1-based session it was recorded in. */
+  const decided = (id: string | undefined) => {
+    if (!id) return null;
+    const d = ui.decisions.find((x) => x.id === id);
+    return { id, session: d ? sessionNumber(ui, d.session) : 0 };
+  };
   if (turn) {
     for (const pe of Object.values(turn.plannedEdges)) {
       if (pe.imports.every((i) => ids.has(edgeId('imports', i.from, i.to)))) continue;
       for (const i of pe.imports) {
         const hit = turn.planViolations.find((v) => v.file === i.from && (!v.target || v.target === i.to));
         const violation: ViolationState = !hit ? null : known(hit.file, hit.invariant) ? 'existing' : 'new';
-        plannedEdges.push({ from: i.from, to: i.to, steps: [...pe.steps], violation });
+        const decision = decided(hit?.decision);
+        plannedEdges.push({ from: i.from, to: i.to, steps: [...pe.steps], violation, ...(decision ? { decision } : {}) });
       }
     }
     // an import the edit gate blocked is a would-be edge: a ghost carrying the new violation
@@ -153,7 +161,32 @@ export function activityFor(ui: UIState, graph: ContextGraph, turnId: string | n
       const kind = graph.nodes[v.target]!.kind;
       if (kind !== 'file' && kind !== 'vendor') continue;
       if (plannedEdges.some((p) => p.from === v.file && p.to === v.target)) continue;
-      plannedEdges.push({ from: v.file, to: v.target, steps: [], violation: 'new' });
+      const decision = decided(v.decision);
+      plannedEdges.push({ from: v.file, to: v.target, steps: [], violation: 'new', source: 'gate', ...(decision ? { decision } : {}) });
+    }
+    // an approach the plan avoids because a decision rules it out: drawn struck through, never red
+    if (turn.avoided.length && ui.map) {
+      const mapper = createMapper(ui.map);
+      const cellIn = (domain: string, layer?: string) =>
+        [layer, 'logic', ...ui.map!.layers.map((l) => l.id)].map((l) => l && cellId(domain, l)).find((c) => c && has(c)) ?? null;
+      const layerOf = (id: string): string | undefined => {
+        const n = graph.nodes[id];
+        if (n?.layer) return n.layer;
+        const p = id.startsWith('domain:') ? null : mapper.place(id);
+        return p?.kind === 'cell' ? p.layer : undefined;
+      };
+      const node = (id: string, other: string): string | null => {
+        if (id.startsWith('domain:')) return has(id) ? cellIn(id.slice(7), layerOf(other)) : null;
+        if (has(id)) return id;
+        const p = mapper.place(id);
+        return p.kind === 'cell' && has(cellId(p.domain, p.layer)) ? cellId(p.domain, p.layer) : null;
+      };
+      for (const a of turn.avoided) {
+        const from = node(a.from, a.to);
+        const to = node(a.to, a.from);
+        if (!from || !to || from === to) continue;
+        plannedEdges.push({ from, to, steps: [], violation: null, source: 'avoided', decision: decided(a.decision) });
+      }
     }
     plannedEdges.sort((a, b) => byId(a.from, b.from) || byId(a.to, b.to));
   }

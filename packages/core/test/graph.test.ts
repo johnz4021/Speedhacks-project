@@ -479,7 +479,7 @@ describe('activityFor', () => {
     const ui = reduce([...events, ...extra]);
     const g = graphOf(ui)!;
     const a = activityFor(ui, g);
-    expect(a.plannedEdges).toContainEqual({ from: 'src/tools/news-summarize.ts', to: 'src/outreach/send.ts', steps: [], violation: 'new' });
+    expect(a.plannedEdges).toContainEqual({ from: 'src/tools/news-summarize.ts', to: 'src/outreach/send.ts', steps: [], violation: 'new', source: 'gate' });
     expect(a.rules['src/tools/news-summarize.ts']).toEqual(['DR-1', 'DR-3']);
     expect(a.plannedNew).toEqual(['src/tools/brand-new.ts']);
     // a searched directory is not a leaf: the cursor falls back to its cell
@@ -492,5 +492,56 @@ describe('activityFor', () => {
     // answering the fork clears the gate block, and with it the ghost
     const answered = reduce([...events, ...extra, t2('fork_answered', { option: 'A', text: 'A', violations: [block] })] as typeof events);
     expect(activityFor(answered, graphOf(answered)!).plannedEdges.some((e) => e.steps.length === 0)).toBe(false);
+  });
+
+  it('marks ghosts a standing decision rules out (avoided approaches, decided violations) with the decision and its session', () => {
+    const { events } = demoLog(); // DR-4 is recorded in session s1
+    const dr3: Violation = {
+      invariant: 'DR-3', kind: 'no_edge', reason: 'You decided this in DR-4. …', file: 'src/tools/news-digest.ts', detail: '',
+      options: ['A', 'B'], target: 'src/outreach/outreach-log.ts', decision: 'DR-4',
+    };
+    let k = 0;
+    const s2 = (kind: string, data: Record<string, unknown>, extra: Record<string, unknown> = {}) => ({ id: `s2-${k++}`, t: 50 + k, session: 's2', turn: 't2', kind, data, ...extra });
+    const extra = [
+      s2('turn_started', { prompt: 'opener', head: '', baseline: '' }),
+      s2('planned', {
+        steps: [{ n: 1, text: 'pass history in', files: ['src/orchestrator/agent.ts', 'src/tools/news-digest.ts'], imports: [{ from: 'src/tools/news-digest.ts', to: 'src/outreach/outreach-log.ts' }] }],
+        cells: [{ domain: 'orchestrator', layer: 'logic', steps: [1], files: ['src/orchestrator/agent.ts'] }, { domain: 'tools', layer: 'logic', steps: [1], files: ['src/tools/news-digest.ts'] }],
+        edges: [{ from: 'tools', to: 'outreach', steps: [1], imports: [{ from: 'src/tools/news-digest.ts', to: 'src/outreach/outreach-log.ts' }] }],
+        unassigned: [],
+        avoided: [{ from: 'src/tools/email-opener.ts', to: 'domain:outreach', decision: 'DR-4', reason: 'research tools never read outreach data' }],
+      }),
+      s2('plan_violation', { violation: dr3 }),
+    ] as unknown as typeof events;
+    const ui = reduce([...events, ...extra]);
+    expect(ui.sessions).toEqual(['s1', 's2']);
+    const g = graphOf(ui)!;
+    const a = activityFor(ui, g);
+    // a missing file maps to the cell it would land in; a domain to its cell in the other end's layer
+    expect(a.plannedEdges).toContainEqual({ from: cellId('tools', 'logic'), to: cellId('outreach', 'logic'), steps: [], violation: null, source: 'avoided', decision: { id: 'DR-4', session: 1 } });
+    expect(a.plannedEdges.find((e) => e.from === 'src/tools/news-digest.ts')).toMatchObject({ violation: 'new', decision: { id: 'DR-4', session: 1 } });
+    const p = project(g, view(ui.map!.domains.map((d) => domainId(d.id))), a);
+    const rejected = p.edges.find((e) => e.id === 'rejected:cell:tools/logic->cell:outreach/logic')!;
+    expect(rejected).toMatchObject({ status: 'ghost', violation: null, decision: { id: 'DR-4', session: 1 }, leafEdges: ['avoided|cell:tools/logic|cell:outreach/logic'] });
+    // the decided plan violation (outreach-log.ts sits in Outreach·Data) is its own rejected ghost, still a crossing
+    expect(p.edges.find((e) => e.id === 'rejected:cell:tools/logic->cell:outreach/data')).toMatchObject({ violation: 'new', decision: { id: 'DR-4', session: 1 } });
+    // ordinary ghosts carry no decision
+    const mid = reduce(events, events.findIndex((e) => e.kind === 'fork_asked') + 1);
+    const gm = graphOf(mid)!;
+    expect(project(gm, view(mid.map!.domains.map((d) => domainId(d.id))), activityFor(mid, gm)).edges.filter((e) => e.status === 'ghost').every((e) => e.decision === null)).toBe(true);
+  });
+});
+
+describe('tables: reads and schema columns', () => {
+  it('builds reads edges and gives table nodes the columns their schema file defines', () => {
+    const facts = {
+      ...miniFacts(),
+      'src/b/h.ts': ff('src/b/h.ts', { reads: [{ table: 'ta', symbol: null, via: 'sql' }] }),
+      'src/a/logic/schema.sql': ff('src/a/logic/schema.sql', { tables: [{ name: 'ta', columns: ['id', 'phone'] }] }),
+    };
+    const g = buildGraph(mini, facts);
+    expect(g.edges.map((e) => e.id)).toContain(edgeId('reads', 'src/b/h.ts', 'table:ta'));
+    expect(g.nodes['table:ta']).toMatchObject({ parent: 'cell:a/logic', columns: ['id', 'phone'] });
+    expect(project(g, view([], { kinds: ['reads'] }), act({})).edges.map((e) => e.id)).toEqual(['domain:b->domain:a']);
   });
 });

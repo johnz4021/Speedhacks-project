@@ -207,11 +207,12 @@ export function project(graph: ContextGraph, view: ViewState, activity: TurnActi
     for (const pe of activity.plannedEdges) {
       const ends = endpoints(pe.from, pe.to);
       if (!ends) continue;
-      const id = `ghost:${ends[0]}->${ends[1]}`;
+      // a ghost a standing decision rules out keeps its own lane ("rejected in DR-4, session 1")
+      const id = `${pe.decision ? 'rejected' : 'ghost'}:${ends[0]}->${ends[1]}`;
       let v = ghosts.get(id);
-      if (!v) ghosts.set(id, (v = { id, from: ends[0], to: ends[1], kinds: ['imports'], count: 0, status: 'ghost', violation: null, confidence: null, steps: [], stepSet: new Set(), leafEdges: [] }));
+      if (!v) ghosts.set(id, (v = { id, from: ends[0], to: ends[1], kinds: ['imports'], count: 0, status: 'ghost', violation: null, confidence: null, steps: [], stepSet: new Set(), leafEdges: [], decision: pe.decision ?? null }));
       v.count += 1;
-      v.leafEdges.push(`${pe.steps.length ? 'plan' : 'gate'}|${pe.from}|${pe.to}`);
+      v.leafEdges.push(`${pe.source ?? (pe.steps.length ? 'plan' : 'gate')}|${pe.from}|${pe.to}`);
       v.violation = worse(v.violation, pe.violation);
       for (const s of pe.steps) v.stepSet.add(s);
     }
