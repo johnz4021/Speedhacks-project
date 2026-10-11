@@ -6,20 +6,22 @@
 version: 1
 
 layers:
+  - { id: ui,       name: UI }
   - { id: entry,    name: Entry }
   - { id: logic,    name: Logic }
   - { id: data,     name: Data }
   - { id: external, name: External }
 
 # Paths that belong to no domain and never create cross-domain edges.
-neutral: ["src/shared/**", "vendor/_calllog.ts"]
-ignore: ["node_modules/**", ".git/**", ".harness/**", "fixtures/**", "scripts/**", "decisions/**", "*.json", "*.md", "*.config.ts", ".*", "domains.yaml"]
+neutral: ["src/shared/**", "vendor/_calllog.ts", "web/src/shared/**"]
+ignore: ["node_modules/**", ".git/**", ".harness/**", "fixtures/**", "scripts/**", "decisions/**", "*.json", "*.md", "*.config.ts", ".*", "domains.yaml", "web/dist/**", "web/public/**", "web/vite.config.ts", "web/tsconfig.json", ".scout/**"]
 
 domains:
   - id: channels
     name: Channels
     purpose: Take requests from HTTP and the CLI
     cells:
+      ui:    { paths: ["web/index.html", "web/src/main.tsx", "web/src/app/**"] }
       entry: { paths: ["src/channels/routes.ts", "src/channels/cli.ts"] }
       logic: { paths: ["src/channels/validate.ts"] }
     tests: ["test/channels/**"]
@@ -28,14 +30,16 @@ domains:
     name: Agent loop
     purpose: Plan each run and call tools in order
     cells:
+      ui:    { paths: ["web/src/features/runs/**"] }
       logic: { paths: ["src/orchestrator/agent.ts", "src/orchestrator/planner.ts", "src/orchestrator/tool-registry.ts"] }
-      data:  { paths: ["src/orchestrator/run-state.ts"], tables: ["runs"] }
+      data:  { paths: ["src/orchestrator/run-state.ts", "src/orchestrator/schema.sql"], tables: ["runs"] }
     tests: ["test/orchestrator/**"]
 
   - id: tools
     name: Research tools
     purpose: Look up companies, news and filings
     cells:
+      ui:       { paths: ["web/src/features/tools/**"] }
       logic:    { paths: ["src/tools/**"] }
       external: { paths: ["vendor/search/**", "vendor/news/**", "vendor/sec-edgar/**", "vendor/enrichment/**"] }
     tests: ["test/tools/**"]
@@ -44,8 +48,9 @@ domains:
     name: Model gateway
     purpose: Every model call, with redaction and cost logging
     cells:
+      ui:       { paths: ["web/src/features/usage/**"] }
       logic:    { paths: ["src/gateway/complete.ts", "src/gateway/embed.ts", "src/gateway/redact.ts", "src/gateway/providers.ts"] }
-      data:     { paths: ["src/gateway/cost-ledger.ts"], tables: ["cost_log"] }
+      data:     { paths: ["src/gateway/cost-ledger.ts", "src/gateway/schema.sql"], tables: ["cost_log"] }
       external: { paths: ["vendor/llm-openai/**", "vendor/llm-anthropic/**", "vendor/embeddings/**"] }
     tests: ["test/gateway/**"]
 
@@ -53,16 +58,18 @@ domains:
     name: Memory
     purpose: Store and retrieve notes about each company
     cells:
+      ui:    { paths: ["web/src/features/notes/**"] }
       logic: { paths: ["src/memory/retrieve.ts", "src/memory/vector-index.ts"] }
-      data:  { paths: ["src/memory/notes-store.ts"], tables: ["notes", "embeddings"] }
+      data:  { paths: ["src/memory/notes-store.ts", "src/memory/schema.sql"], tables: ["notes", "embeddings"] }
     tests: ["test/memory/**"]
 
   - id: outreach
     name: Outreach
     purpose: Draft emails and keep the CRM in sync
     cells:
+      ui:       { paths: ["web/src/features/outreach/**"] }
       logic:    { paths: ["src/outreach/draft-email.ts", "src/outreach/send.ts"] }
-      data:     { paths: ["src/outreach/crm-sync.ts", "src/outreach/outreach-log.ts"], tables: ["contacts", "outreach_log"] }
+      data:     { paths: ["src/outreach/crm-sync.ts", "src/outreach/outreach-log.ts", "src/outreach/schema.sql"], tables: ["contacts", "outreach_log"] }
       external: { paths: ["vendor/crm/**", "vendor/email/**"] }
     tests: ["test/outreach/**"]
 
@@ -91,3 +98,8 @@ invariants:
     to: outreach
     exceptions: []
     source: cartographer
+
+# Scout's HTTP routes are a table of [method, /regex/, handler] entries (see schema.ts for pattern semantics).
+cartography:
+  routes:
+    - { file: "src/channels/routes.ts", pattern: '\[\s*"(?<method>[A-Z]+)",\s*/\^(?<path>(?:\\.|[^$])*)\$/' }

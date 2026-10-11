@@ -5,7 +5,7 @@ import { loadMap, mapYaml } from './helpers';
 describe('parseDomainMap', () => {
   it('parses the Scout fixture', () => {
     const map = loadMap();
-    expect(map.layers.map((l) => l.id)).toEqual(['entry', 'logic', 'data', 'external']);
+    expect(map.layers.map((l) => l.id)).toEqual(['ui', 'entry', 'logic', 'data', 'external']);
     expect(map.domains.map((d) => d.id)).toEqual(['channels', 'orchestrator', 'tools', 'gateway', 'memory', 'outreach']);
     expect(map.invariants.map((i) => [i.id, i.kind])).toEqual([
       ['DR-1', 'only_via'],
