@@ -56,3 +56,17 @@ describe('ledger (SPEC §9)', () => {
     expect(l.session.rejectedOptionsBlocked).toBe(1);
   });
 });
+
+describe('ledger: avoided approaches', () => {
+  it('counts a plan that avoids a decided-against approach as a rejected option blocked', () => {
+    const { events } = demoLog();
+    const t3: HarnessEvent[] = [
+      { id: 'y1', t: 1, session: 's2', turn: 't3', kind: 'turn_started', data: { prompt: 'opener from past emails', head: '', baseline: '' } },
+      { id: 'y2', t: 2, session: 's2', turn: 't3', kind: 'planned', data: { steps: [], cells: [], edges: [], unassigned: [],
+        avoided: [{ from: 'domain:tools', to: 'domain:outreach', decision: 'DR-4', reason: 'research tools never read outreach data' }] } },
+      { id: 'y3', t: 3, session: 's2', turn: 't3', kind: 'turn_ended', data: { added: 0, removed: 0, files: [], reason: 'success' } },
+    ];
+    const l = ledger(reduce([...events, ...t3]));
+    expect(l.turns.at(-1)!.rejectedOptionsBlocked).toBe(1);
+  });
+});

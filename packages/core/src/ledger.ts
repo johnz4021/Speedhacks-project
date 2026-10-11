@@ -90,7 +90,11 @@ export function turnLedger(s: UIState, turn: TurnState): TurnLedger {
     if (f.answered === null || !f.beforeCode) continue;
     forks += new Set(f.violations.map(vkey).filter((k) => turn.violationsSeen.some((x) => x.source === 'plan' && vkey(x.v) === k))).size;
   }
-  const rejected = new Set(turn.violationsSeen.filter((x) => x.v.decision).map((x) => vkey(x.v))).size;
+  // A rejected option is blocked when a violation cites a decision, or when the plan avoids it citing one (beat 4).
+  const rejected = new Set([
+    ...turn.violationsSeen.filter((x) => x.v.decision).map((x) => `${x.v.decision}|${x.v.file}`),
+    ...(turn.avoided ?? []).map((a) => `${a.decision}|${a.from}->${a.to}`),
+  ]).size;
   return {
     turn: turn.id,
     linesChanged: turn.numstat ? turn.numstat.added + turn.numstat.removed : null,
