@@ -342,21 +342,23 @@ The new events are all in the log, so the UI is still a reduction and replay cov
 
 ## 4.10 Demo reconciliation (DEMO_PLAN.md, ALIKE_INTEGRATION.md)
 
-`DEMO_PLAN.md` fixes the storyline, and that pulls some phases forward:
+`DEMO_PLAN.md` (rewritten Oct 11 afternoon around "decisions that protect the design") fixes the storyline and pulls phases forward:
 
 | Beat | Needs | Phase | Status |
 | --- | --- | --- | --- |
-| Load | Instant skeleton, then the cartographer's map (6 domains, 5 layers incl. UI) | N5 | Engine merged; onboarding with scored candidates in wave 2 |
-| 1 Ask | Journey overlay ("Start research"), trace to `contacts.phone` and to `@anthropic-ai/sdk` (two paths, one red), graph tools | N8, N10 | Journeys and trace computed (wave 2); overlay UI moves up into wave 3 |
-| 2 Fix a bug | Symbol ghosts (`redact.ts#PHONE_PATTERN`), Point by shift-click | N6, N7 | Wave 3; fallback is cell ghosts and typing the path |
-| 3 Feature | Fork on DR-3, the decision recorded in git **and Alike from the server** | SPEC v1 + Alike redesign | Gate and forks done; Alike redesign pending capability check |
-| 4 Remember | Decision-backed violations replan without asking; plans list `avoided` approaches; **struck-through "rejected in DR-4, session 1" edges**; ledger "rejected options blocked" | SPEC v1 + contracts | Contracts merged; server and renderer in wave 2 |
-| 5 Living map | Watchlists proposal as ghosts with scores | N5 | Engine merged; proposal UI in wave 3 |
-| 6 Audit | Advisory finding from an outreach *read* | N9 | Auditor merged soon; needs `reads` facts (wave 2) and findings UI (wave 3) |
+| Load | Instant skeleton, then the cartographer's map (6 domains, 5 layers incl. UI) | N5 | Built; the assembling animation is polished in wave 3 |
+| 1 Ask | Claude answers from the graph tools; answer paths fly the map; journey overlay ("Start research"); a trace with three classes of path to the provider (gateway, red bypass, amber uncosted SDK calls) | N7, N8, N10 | Graph tools, trace and journeys built; path links, overlay and three-class trace in wave 3 |
+| 2 Fix a bug | Search costs missing; symbol ghosts; shift-click `cost-ledger.ts#recordCost` to move the plan | N6, N7 | Contracts built (`PlanStep.symbols`, `chat.context`); UI in wave 3 |
+| 3 Feature | 10-K tool copies the gateway bypass → DR-1 fork → DR-4 ("filings go through the gateway, in a filing mode") in git and Alike (server-side, folder anchors on `src/tools/` and `src/gateway/`) | SPEC v1 + Alike redesign | Built and verified live (the fork forked 3 of 3 on Scout); tools-side anchors in wave 3 |
+| **4 Conflicting change** | **Decisions protect the code that implements them:** `protects` recorded at the decision turn's end; plans and edits touching it emit `decision_touched`; a DR marker on the cell, a line on the approval card, and the decision in Claude's next tool result | New (beyond N-phases) | Contracts built; server and UI in wave 3 |
+| 4b Reuse | Struck-through "rejected in DR-4, session 1" edge; ledger "rejected options blocked" = 1 | SPEC v1 + contracts | Built and verified live (earlier storyline): plan `avoided`, decided violations replan without asking, ledger counts only earlier decisions |
+| 4c Teammate | Alike capture on for Claude Code; per-take repositories | Alike | Capture on; `--take N` in `npm run demo` |
+| 5 Living map | Watchlists proposal as ghosts with scores | N5 | Engine built; proposal UI in wave 3 |
+| 6 Audit | Filing text through `complete()` without filing mode → advisory finding citing DR-4 | N9 | Auditor built; findings UI in wave 3 |
 
 Map and facts changes the demo requires (done): the reference map has a `ui` top layer, `schema.sql` files in data cells, web cells per domain, neutral `web/src/shared/**`, and a `cartography.routes` pattern for Scout's route table. Real Scout maps 72 files, none unassigned, 12 domain pairs, 11 routes, and exactly one violation.
 
-Alike (`ALIKE_INTEGRATION.md`) moves recording off the model and onto the server, anchors decisions to the architecture rather than to the violating file, reads decisions back, and isolates demo takes. The design is settled after checking Alike's real capabilities. Interpretability runs only against disposable copies (`npm run demo` → `../scout-run`); `../scout-agent` stays untouched at `demo-start`.
+Alike (`ALIKE_INTEGRATION.md`): decisions are recorded by the server through the paired CLI with folder anchors and principle-first wording; the URN is written back into the DR file. Alike can't add anchors later through the device token, so the functions a decision protects reach Alike only through the folder anchors.
 
 ## 5. Visual direction (decision D1)
 
