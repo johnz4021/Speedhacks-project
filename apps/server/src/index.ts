@@ -10,6 +10,7 @@ import { Repo } from './repo';
 import { Session } from './session';
 import { commitPaths } from './git';
 import { proposeMap } from './cartographer';
+import { attachLivingMap, livingMapRoutes, onboardingSkeleton } from './living-map'; // living map (NAVIGATION_PLAN §4)
 
 const here = dirname(fileURLToPath(import.meta.url));
 const REPO = process.env.HARNESS_REPO ? resolve(process.env.INIT_CWD ?? process.cwd(), process.env.HARNESS_REPO) : '';
@@ -51,6 +52,9 @@ async function load() {
     startSession();
     return;
   }
+  // ---- living map: show the instant deterministic skeleton while the cartographer works (NAVIGATION_PLAN §4.2) ----
+  showProposal(onboardingSkeleton(repo.root), 'cartographer');
+  // ---- end living map ----
   let yaml: string;
   let source: 'cartographer' | 'fixture' = 'cartographer';
   try {
@@ -61,6 +65,7 @@ async function load() {
     yaml = readFileSync(FALLBACK_MAP, 'utf8');
     source = 'fixture';
   }
+  if (session) return; // living map: the user confirmed the skeleton before the cartographer answered
   showProposal(yaml, source);
 }
 
@@ -74,6 +79,11 @@ function showProposal(yaml: string, source: 'cartographer' | 'fixture') {
 }
 
 const app = new Hono();
+
+// ---- living map (NAVIGATION_PLAN §4): drift → cartographer proposals, accept/reject, survey ----
+const living = attachLivingMap({ bus, repo });
+app.route('/api', livingMapRoutes(living));
+// ---- end living map ----
 app.get('/api/info', (c) => c.json({ repo: REPO, session: bus.session, busy, proposal: !!proposal }));
 app.get('/api/events', (c) => c.json(bus.events));
 app.post('/api/chat', async (c) => {

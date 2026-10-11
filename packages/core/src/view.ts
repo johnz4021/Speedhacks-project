@@ -11,3 +11,5 @@ export * from './contracts/facts';
 export * from './contracts/graph';
 export * from './contracts/cartography';
 export type * from './contracts/api';
+// Living map engine (Cartography lane; pure, browser-safe).
+export * from './cartography';
