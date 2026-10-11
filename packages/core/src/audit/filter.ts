@@ -96,8 +96,10 @@ export function relevantDecisions(decisions: readonly AuditDecision[], map: Doma
     const why = inv ? invariantTouches(inv, s, mapper, targets) : null;
     if (why) reasons.push({ kind: 'invariant', detail: why });
     const prose = `${d.title}\n${d.outcome}\n${d.rationale}`;
-    const paths = pathTokens(prose).flatMap((t) => touched.filter((p) => under(p, t)).map((p) => `${t} ↔ ${p}`));
-    const named = [...new Set(words(prose))].filter((w) => names.has(w)).map((w) => `"${w}" ↔ ${names.get(w)}`);
+    const tokens = pathTokens(prose);
+    const paths = tokens.flatMap((t) => touched.filter((p) => under(p, t)).map((p) => `${t} ↔ ${p}`));
+    const bare = tokens.reduce((text, t) => text.split(t).join(' '), prose); // folder names inside paths aren't mentions
+    const named = [...new Set(words(bare))].filter((w) => names.has(w)).map((w) => `"${w}" ↔ ${names.get(w)}`);
     if (paths.length || named.length) reasons.push({ kind: 'mention', detail: [...new Set(paths), ...named].join(', ') });
     if (reasons.length) out.push({ decision: d, reasons });
   }

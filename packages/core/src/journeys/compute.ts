@@ -72,10 +72,12 @@ export function computeJourneys(graph: ContextGraph, facts: Readonly<Record<stri
   const conf = new Map<string, StepConfidence>();
   const key = (a: string, b: string) => `${a}\u0000${b}`;
   const callers = new Map<string, string[]>();
+  const callees = new Map<string, string[]>();
   for (const e of graph.edges) {
     if (e.kind === 'calls') {
       if (!conf.has(key(e.from, e.to))) conf.set(key(e.from, e.to), e.confidence ?? 'syntactic');
       (callers.get(e.to) ?? callers.set(e.to, []).get(e.to)!).push(e.from);
+      (callees.get(e.from) ?? callees.set(e.from, []).get(e.from)!).push(e.to);
     } else if (e.kind === 'handles') conf.set(key(e.from, e.to), 'syntactic');
     else if (e.kind === 'implements') conf.set(key(e.to, e.from), 'dispatch');
   }
@@ -117,8 +119,8 @@ export function computeJourneys(graph: ContextGraph, facts: Readonly<Record<stri
         if (found.length) { paths = found.map((p) => [start, ...p]); break; }
       }
     }
-    // No sink reached (reads aren't walked; dynamic dispatch): a route still shows its handler.
-    let main = paths[0] ?? (route?.handler && graph.nodes[route.handler] && start === route.id ? [start, route.handler] : [start]);
+    // No sink reached (reads aren't walked; dynamic dispatch): a route still shows its handler and what it calls.
+    let main = paths[0] ?? (route?.handler && graph.nodes[route.handler] && start === route.id ? [start, ...followCalls(graph, callees, route.handler)] : [start]);
     // Longest chain; on a tie, one that ends at an outside service beats one that ends at a table.
     const rank = (p: string[]) => p.length * 2 + (p.at(-1)!.startsWith('table:') ? 0 : 1);
     for (const p of paths) if (rank(p) > rank(main)) main = p;
@@ -152,6 +154,22 @@ export function computeJourneys(graph: ContextGraph, facts: Readonly<Record<stri
     });
   }
   return out.sort((a, b) => byId(a.id, b.id));
+}
+
+/**
+ * `from`, then up to `hops` calls onward, each the first callee (by id) in another file — the handler's real work,
+ * when no sink is reachable (e.g. a GET that only reads). Stops at a cycle or when nothing is called outside the file.
+ */
+function followCalls(graph: ContextGraph, callees: Map<string, string[]>, from: string, hops = 2): string[] {
+  const out = [from];
+  for (let cur = from; out.length <= hops;) {
+    const here = cur.split('#')[0];
+    const next = [...new Set(callees.get(cur) ?? [])].sort(byId).find((id) => graph.nodes[id] && id.split('#')[0] !== here && !out.includes(id));
+    if (!next) break;
+    out.push(next);
+    cur = next;
+  }
+  return out;
 }
 
 /** The UI symbol behind a fetch site: a caller of it (components first, then by id), or null when nothing calls it. */

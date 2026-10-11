@@ -210,6 +210,28 @@ describe('auditor loop (fake auditor)', () => {
   });
 });
 
+describe('plan review (HARNESS_AUDIT_PLANS=1)', () => {
+  it('reviews each submitted plan mid-turn without a diff; off by default', async () => {
+    const { bus, repo, calls, idle } = setup(); // plans: false
+    const planCalls: AuditInput[] = [];
+    const reviewer = attachAuditor({ bus, repo, auditor: async (input) => { planCalls.push(input); return { findings: [{ decision: 'DR-4', files: ['src/tools/filings-digest.ts'], lines: [], text: 'Step 1 sends filings through complete() without the filings redaction mode DR-4 asks for.', confidence: 'medium' }], cost: 0.01 }; }, plans: true });
+    bus.turn = 'tp';
+    bus.emit('turn_started', { prompt: 'add a filings digest', head: '', baseline: '' });
+    bus.emit('planned', { steps: [{ n: 1, text: 'Add src/tools/filings-digest.ts calling complete()', files: ['src/tools/filings-digest.ts'], imports: [{ from: 'src/tools/filings-digest.ts', to: 'src/gateway/complete.ts' }] }], cells: [], edges: [], unassigned: [] });
+    await reviewer.idle();
+    await idle();
+    expect(calls).toHaveLength(0); // the default loop doesn't review plans
+    expect(planCalls).toHaveLength(1);
+    expect(planCalls[0]!.surface).toMatchObject({ source: 'plan', files: ['src/tools/filings-digest.ts'], baseline: null });
+    expect(planCalls[0]!.diff).toBe('');
+    expect(planCalls[0]!.decisions.map((d) => d.decision.id)).toEqual(['DR-4']);
+    const f = bus.events.find((e) => e.kind === 'audit_finding')!;
+    expect(f).toMatchObject({ turn: 'tp', data: { finding: { id: 'AF-1', decision: 'DR-4', confidence: 'medium' } } });
+    expect(bus.events.filter((e) => e.kind === 'maintenance_run' && (e.data as EventData['maintenance_run']).trigger === 'plan')).toHaveLength(1);
+    reviewer.detach();
+  });
+});
+
 describe('journeys loop (fake namer)', () => {
   it('publishes journeys after the scan, names them once (cached by step hash), and confirm/rename clears inferred', async () => {
     const { root, bus, journeys, named, turn, put, of, idle } = setup();
