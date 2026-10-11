@@ -3,8 +3,9 @@ import { join, relative, isAbsolute } from 'node:path';
 import { watch, type FSWatcher } from 'chokidar';
 import { diffLines } from 'diff';
 import {
-  parseDomainMap, createMapper, scanRepo, factsForSource, domainEdges, check, fileExistsIn,
-  type DomainMap, type Facts, type ImportEdge, type Violation, type Placement,
+  parseDomainMap, createMapper, listRepoFiles, scanRepoFacts, factsForSource, domainEdges, check, fileExistsIn, createFactsIndex,
+  settleCalls, diffSymbols,
+  type DomainMap, type Facts, type FileFacts, type ImportEdge, type Violation, type Placement, type SymbolDiff,
 } from '@harness/core';
 import type { Bus } from './bus';
 
@@ -16,6 +17,9 @@ export class Repo {
   mapText = '';
   mapper!: ReturnType<typeof createMapper>;
   facts: Facts = { files: [], imports: [], writes: [] };
+  /** Tier 1 facts per code file (NAVIGATION_PLAN §3.1); the previous value is diffed on every change. */
+  fileFacts = new Map<string, FileFacts>();
+  private index!: ReturnType<typeof createFactsIndex>;
   violations: Violation[] = [];
   private contents = new Map<string, string>();
   private pending = new Map<string, NodeJS.Timeout>(); // paths a hook is editing; the watcher leaves them alone
@@ -35,6 +39,7 @@ export class Repo {
     this.mapText = text;
     this.map = parseDomainMap(text);
     this.mapper = createMapper(this.map);
+    this.index = createFactsIndex(this.root, this.map, this.exists, (p) => this.current(p));
   }
 
   loadMapFile() { this.setMap(readFileSync(this.mapPath, 'utf8')); }
@@ -74,11 +79,14 @@ export class Repo {
   }
 
   /** Every non-ignored file under the current map. */
-  listFiles() { return scanRepo(this.root, this.map).files; }
+  listFiles() { return listRepoFiles(this.root, this.map, this.mapper); }
 
-  /** Full fact scan → `repo_scanned` + `violation_found`. */
+  /** Full fact scan → `repo_scanned` (with Tier 1 `fileFacts`) + `violation_found`. */
   scan() {
-    this.facts = scanRepo(this.root, this.map);
+    this.exists.clear();
+    const { fileFacts, ...facts } = scanRepoFacts(this.root, this.map);
+    this.facts = facts;
+    this.fileFacts = new Map(Object.entries(fileFacts));
     this.contents.clear();
     for (const f of this.facts.files) {
       if (CODE.test(f)) this.contents.set(f, readFileSync(join(this.root, f), 'utf8'));
@@ -88,8 +96,32 @@ export class Repo {
       imports: this.facts.imports,
       writes: this.facts.writes,
       edges: domainEdges(this.facts, this.mapper),
+      fileFacts: [...this.fileFacts.values()],
     }, { turn: null });
     this.recheck();
+  }
+
+  /**
+   * Tier 1 facts for a changed code file (null when deleted), calls settled against the rest of the repo. If the new
+   * text doesn't parse (mid-edit), symbols, calls, routes and entries stay as they were instead of reading as removed.
+   */
+  private refreshFacts(path: string, text: string | null): { prev: FileFacts | null; next: FileFacts | null } {
+    const prev = this.fileFacts.get(path) ?? null;
+    if (text === null) {
+      this.fileFacts.delete(path);
+      return { prev, next: null };
+    }
+    const { facts, parsed } = this.index.extract(path, text);
+    if (!parsed && prev) Object.assign(facts, { symbols: prev.symbols, calls: prev.calls, routes: prev.routes, entries: prev.entries });
+    else {
+      const names = (file: string) => {
+        const f = file === path ? facts : this.fileFacts.get(file);
+        return f ? new Set(f.symbols.map((s) => s.name)) : null;
+      };
+      facts.calls = settleCalls(facts.calls, names);
+    }
+    this.fileFacts.set(path, facts);
+    return { prev, next: facts };
   }
 
   /** Re-run the checker over the whole repo (load call site) and publish the current set. */
@@ -137,13 +169,21 @@ export class Repo {
     if (created || deleted) this.exists.clear();
 
     // Import and write facts for this one file.
+    const code = CODE.test(path);
+    // Tier 1 first: its parse leaves the import/write record cached for the gate facts below.
+    const tier1 = code ? this.refreshFacts(path, deleted ? null : next) : null;
     const before = this.facts.imports.filter((i) => i.from === path);
-    const after = CODE.test(path) && !deleted ? factsForSource(path, next, this.exists) : { imports: [], writes: [] };
+    const after = code && !deleted ? factsForSource(path, next, this.exists) : { imports: [], writes: [] };
     this.facts.imports = [...this.facts.imports.filter((i) => i.from !== path), ...after.imports];
     this.facts.writes = [...this.facts.writes.filter((w) => w.file !== path), ...after.writes];
-    if (deleted) this.contents.delete(path); else if (CODE.test(path)) this.contents.set(path, next);
+    if (deleted) this.contents.delete(path); else if (code) this.contents.set(path, next);
 
-    this.bus.emit('edited', { added, removed, created, ...(attr.unattributed ? { unattributed: true } : {}), ...(attr.tool ? { tool: attr.tool } : {}) }, { path, cell: this.cellOf(path) });
+    // Which symbols changed; the file's new facts follow right after `edited`.
+    const symbols: SymbolDiff | undefined = tier1 ? diffSymbols(tier1.prev?.symbols ?? [], tier1.next?.symbols ?? []) : undefined;
+    this.bus.emit('edited', {
+      added, removed, created, ...(attr.unattributed ? { unattributed: true } : {}), ...(attr.tool ? { tool: attr.tool } : {}), ...(symbols ? { symbols } : {}),
+    }, { path, cell: this.cellOf(path) });
+    if (tier1) this.bus.emit('facts_changed', { facts: tier1.next }, { path, cell: this.cellOf(path) });
 
     const key = (i: ImportEdge) => `${i.from}→${i.to}`;
     const beforeKeys = new Set(before.map(key));
@@ -155,6 +195,19 @@ export class Repo {
     }
     for (const de of domainEdges({ imports: lost, writes: [] }, this.mapper)) {
       for (const edge of de.files) this.bus.emit('edge_removed', { edge, from: de.from, to: de.to }, { path });
+    }
+
+    // Outgoing call edges, diffed like imports.
+    if (tier1) {
+      const callKey = (c: { from: string; to: string }) => `${c.from}\u0000${c.to}`;
+      const oldCalls = new Set((tier1.prev?.calls ?? []).map(callKey));
+      const newCalls = new Set((tier1.next?.calls ?? []).map(callKey));
+      for (const c of tier1.next?.calls ?? []) {
+        if (!oldCalls.has(callKey(c))) this.bus.emit('call_added', { from: c.from, to: c.to, confidence: c.confidence }, { path });
+      }
+      for (const c of tier1.prev?.calls ?? []) {
+        if (!newCalls.has(callKey(c))) this.bus.emit('call_removed', { from: c.from, to: c.to, confidence: c.confidence }, { path });
+      }
     }
   }
 

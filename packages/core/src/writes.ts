@@ -1,8 +1,11 @@
-import { stripComments } from './imports';
+import { moduleRecord } from './facts/record';
 
-const WRITE = /(?<![\w$])db\s*\.\s*(?:insert|update)\s*\(\s*(?:"([^"\\\n]+)"|'([^'\\\n]+)'|`([^`\\$]+)`)/g;
+export { findWrites, type WriteHit } from './facts/adapters';
 
-/** Tables written via `db.insert("t", …)` / `db.update("t", …)` with a literal table name, in source order. */
-export function scanWrites(source: string): string[] {
-  return [...stripComments(source).matchAll(WRITE)].map((m) => (m[1] ?? m[2] ?? m[3])!);
+/**
+ * Tables written by `source`, in source order: Scout's `db.insert/update("t", …)` with a literal name, plus the
+ * Prisma, Drizzle, Knex, Kysely and raw-SQL adapters (see `facts/adapters.ts`). Comments are ignored.
+ */
+export function scanWrites(source: string, path = 'source.ts'): string[] {
+  return moduleRecord(path, source).writes.map((w) => w.table);
 }

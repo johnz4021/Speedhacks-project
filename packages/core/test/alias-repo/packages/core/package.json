@@ -1,0 +1,1 @@
+{ "name": "@acme/core", "exports": { ".": "./src/index.ts", "./lib/*": "./src/lib/*.ts" }, "imports": { "#internal/*": "./src/lib/*.ts" } }

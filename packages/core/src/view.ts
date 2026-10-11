@@ -15,3 +15,5 @@ export type * from './contracts/api';
 export * from './cartography';
 // Graph lane: ContextGraph, activity, projection, autoExpand, trace (browser-safe).
 export * from './graph';
+// Facts lane: which symbols an edit changed.
+export { diffSymbols } from './facts/diff';
